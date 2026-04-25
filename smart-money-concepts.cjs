@@ -129,7 +129,7 @@ function _colorToHex(c) {
   const hex = (c >>> 0).toString(16).padStart(8, '0');
   return hex.slice(2); // strip alpha
 }
-function parseGraphicOutput(rawData, timeframe) {
+function parseGraphicOutput(rawData, timeframe, chartPeriods) {
   const graphic = rawData?.graphic || {};
   const boxes = Object.values(graphic.dwgBoxes ?? graphic.boxes ?? graphic.dwgboxes ?? {});
   const labels = Object.values(graphic.dwgLabels ?? graphic.labels ?? graphic.dwglabels ?? {});
@@ -137,16 +137,27 @@ function parseGraphicOutput(rawData, timeframe) {
   const tables = Object.values(graphic.dwgTables ?? graphic.tables ?? graphic.dwgtables ?? {});
 
   // BOS/CHoCH labels
-  const bosLabels = labels.filter(l => /bos/i.test(String(l.t))).map(l => ({
-    text: l.t, x: l.x, y: l.y, color: l.ci,
-    type: 'BOS', isBullish: /bull/i.test(String(l.t)), isBearish: /bear/i.test(String(l.t)),
-    time: l.time
-  }));
-  const chochLabels = labels.filter(l => /choch|choc/i.test(String(l.t))).map(l => ({
-    text: l.t, x: l.x, y: l.y, color: l.ci,
-    type: 'CHoCH', isBullish: /bull/i.test(String(l.t)), isBearish: /bear/i.test(String(l.t)),
-    time: l.time
-  }));
+  // Infer bullish/bearish from y-value trend (higher = bullish break, lower = bearish break)
+  const rawBOS = labels.filter(l => /bos/i.test(String(l.t))).sort((a, b) => (a.x || 0) - (b.x || 0));
+  const bosLabels = rawBOS.map((l, i) => {
+    const prev = i > 0 ? rawBOS[i - 1] : null;
+    const yDir = prev ? (l.y > prev.y ? 'up' : l.y < prev.y ? 'down' : 'flat') : 'unknown';
+    return {
+      text: l.t, x: l.x, y: l.y, color: l.ci,
+      type: 'BOS', isBullish: yDir === 'up', isBearish: yDir === 'down',
+      time: l.time
+    };
+  });
+  const rawCHoCH = labels.filter(l => /choch|choc/i.test(String(l.t))).sort((a, b) => (a.x || 0) - (b.x || 0));
+  const chochLabels = rawCHoCH.map((l, i) => {
+    const prev = i > 0 ? rawCHoCH[i - 1] : null;
+    const yDir = prev ? (l.y > prev.y ? 'up' : l.y < prev.y ? 'down' : 'flat') : 'unknown';
+    return {
+      text: l.t, x: l.x, y: l.y, color: l.ci,
+      type: 'CHoCH', isBullish: yDir === 'up', isBearish: yDir === 'down',
+      time: l.time
+    };
+  });
 
   // FVG boxes: small boxes with top/bottom representing the gap
   // Filter by text first, then fall back to narrow boxes (gaps are typically 1-bar wide)
@@ -159,15 +170,27 @@ function parseGraphicOutput(rawData, timeframe) {
   }));
 
   // OB boxes: larger boxes representing order blocks
-  // Filter by text first, then fall back to wider boxes (>5 bars) that aren't FVGs
-  const obBoxes = boxes.filter(b => /ob|block/i.test(String(b.t)) || (b.x2 !== undefined && b.x1 !== undefined && Math.abs(b.x2 - b.x1) > 5 && !/fvg/i.test(String(b.t)) && b.t !== '•')).map(b => ({
-    top: Math.max(b.y1||0, b.y2||0), bottom: Math.min(b.y1||0, b.y2||0),
-    left: b.x1, right: b.x2,
-    color: b.c, text: b.t,
-    size: Math.abs((Math.max(b.y1||0, b.y2||0)) - (Math.min(b.y1||0, b.y2||0))),
-    isBullish: /bull/i.test(String(b.t)), isBearish: /bear/i.test(String(b.t)),
-    isMitigated: b.ex === false
-  }));
+  // Infer bullish/bearish from position relative to latest close (below = demand/bullish, above = supply/bearish)
+  const lastChartPeriod = (chartPeriods || []).length > 0 ? chartPeriods[chartPeriods.length - 1] : null;
+  const latestClose = lastChartPeriod?.close ?? lastChartPeriod?.c ?? null;
+  const obBoxes = boxes.filter(b => /ob|block/i.test(String(b.t)) || (b.x2 !== undefined && b.x1 !== undefined && Math.abs(b.x2 - b.x1) > 5 && !/fvg/i.test(String(b.t)) && b.t !== '•')).map(b => {
+    const top = Math.max(b.y1||0, b.y2||0);
+    const bottom = Math.min(b.y1||0, b.y2||0);
+    const mid = (top + bottom) / 2;
+    let isBullish = /bull/i.test(String(b.t));
+    let isBearish = /bear/i.test(String(b.t));
+    if (!isBullish && !isBearish && latestClose) {
+      if (mid < latestClose) isBullish = true;
+      else if (mid > latestClose) isBearish = true;
+    }
+    return {
+      top, bottom, left: b.x1, right: b.x2,
+      color: b.c, text: b.t,
+      size: Math.abs(top - bottom),
+      isBullish, isBearish,
+      isMitigated: b.ex === false
+    };
+  });
 
   // EQH/EQL lines
   const eqhLines = lines.filter(l => /eqh|eql/i.test(String(l.t))).map(l => ({
@@ -183,9 +206,8 @@ function parseGraphicOutput(rawData, timeframe) {
     type: l.y1 > l.y2 ? 'resistance' : 'support'
   }));
 
-  // Period data for price context
+  // Period data for price context (study periods may not have OHLC; use chartPeriods for latestClose)
   const periods = rawData?.periods || [];
-  const latestClose = periods.length > 0 ? periods[periods.length - 1].close : null;
 
   // Calculate active vs mitigated structures
   const activeFVGs = fvgBoxes.filter(b => !b.isMitigated);
@@ -333,7 +355,8 @@ async function runWebSocket(symbol, tf, bars, startTime, inputs) {
         study.onUpdate(() => { updateCount++; if (updateCount >= 3 && !resolved) { resolved = true; clearTimeout(timer); resolve(); } });
       });
       const rawData = { periods: study.periods || [], graphic: study.graphic || {}, bars };
-      const parsed = parseGraphicOutput(rawData, tf);
+      const chartPeriods = chart.periods || [];
+      const parsed = parseGraphicOutput(rawData, tf, chartPeriods);
       parsed.meta.durationMs = Date.now() - startTime;
       try { study.remove(); } catch {}
       try { chart.delete(); } catch {}
