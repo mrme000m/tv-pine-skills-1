@@ -2,6 +2,12 @@
 name: ict-auto-validated-smc
 description: |
   Use the ICT Auto-Validated SMC TradingView indicator to analyze any symbol/timeframe and extract Smart Money Concepts structural trading signals. This skill triggers when the user wants to: identify order blocks, fair value gaps, breaker blocks, BPRs, structure breaks (BOS/CHoCH), or trade with ICT methodology. Also triggers when the user runs `ict-auto-validated-smc.cjs` or mentions terms like "ICT", "SMC", "order block", "FVG", "fair value gap", "breaker", "BOS", "CHoCH", "smart money", "institutional order flow", or "liquidity sweep".
+version: 1.0.0
+compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
+metadata:
+  hermes:
+    tags: [trading, tradingview, pine-script, technical-analysis]
+    category: trading
 ---
 
 # ICT Auto-Validated SMC — Trading Opportunity Finder

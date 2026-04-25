@@ -2,6 +2,12 @@
 name: ema-atr-pro-engine
 description: |
   Use the EMA + ATR PRO Ultimate Engine TradingView indicator to track signal activation history, analyze EMA trail trends, and identify high-probability entry/exit setups based on ATR-based trailing stops and EMA crossovers. This skill triggers when the user wants to: analyze EMA trail signals, track signal history, find ATR-based entry points, detect EMA crossovers, or trade with trailing stop logic. Also triggers when the user runs `ema-atr-pro-engine.cjs` or mentions terms like "EMA ATR", "trail signal", "ATR engine", "EMA crossover", "trailing stop", or "signal history".
+version: 1.0.0
+compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
+metadata:
+  hermes:
+    tags: [trading, tradingview, pine-script, technical-analysis]
+    category: trading
 ---
 
 # EMA + ATR PRO Ultimate Engine — Trading Opportunity Finder

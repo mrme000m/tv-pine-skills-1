@@ -2,6 +2,12 @@
 name: shemar-smc-confidence
 description: |
   Use the SHEMAR HMA ST + SMC Confidence Filter TradingView indicator to analyze HMA, Supertrend, and Kernel convergence for high-confidence filtered trading signals. This skill triggers when the user wants to: analyze HMA supertrend alignment, detect kernel convergence, find SMC confidence signals, filter raw signals for quality, or trade with multi-indicator confirmation. Also triggers when the user runs `shemar-smc-confidence.cjs` or mentions terms like "SHEMAR", "HMA supertrend", "SMC confidence", "kernel convergence", "filtered signals", or "multi-indicator alignment".
+version: 1.0.0
+compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
+metadata:
+  hermes:
+    tags: [trading, tradingview, pine-script, technical-analysis]
+    category: trading
 ---
 
 # SHEMAR HMA ST + SMC Confidence Filter — Trading Opportunity Finder

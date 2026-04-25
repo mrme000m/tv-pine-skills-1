@@ -2,6 +2,12 @@
 name: support-resistance-breaks
 description: |
   Use the Support and Resistance Breaks TradingView indicator to detect pivot-based S/R level breaks, measure break intensity, and identify price position relative to key structural levels. This skill triggers when the user wants to: detect support resistance breaks, find pivot breakouts, analyze break intensity, identify S/R levels, or trade structural breaks. Also triggers when the user runs `support-resistance-breaks.cjs` or mentions terms like "S/R breaks", "support break", "resistance break", "pivot break", "breakout", "break intensity", or "structural break".
+version: 1.0.0
+compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
+metadata:
+  hermes:
+    tags: [trading, tradingview, pine-script, technical-analysis]
+    category: trading
 ---
 
 # Support and Resistance Breaks — Trading Opportunity Finder

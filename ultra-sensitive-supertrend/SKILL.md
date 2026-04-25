@@ -2,6 +2,12 @@
 name: ultra-sensitive-supertrend
 description: |
   Use the Ultra Sensitive SuperTrend TradingView indicator to analyze dual SuperTrend alignment, detect ultra buy/sell signals, and identify high-confidence trend entries based on double confirmation. This skill triggers when the user wants to: analyze dual supertrend alignment, detect ultra signals, find supertrend confluence, trade double confirmation setups, or identify early trend changes. Also triggers when the user runs `ultra-sensitive-supertrend.cjs` or mentions terms like "ultra supertrend", "dual supertrend", "super trend", "ultra buy", "ultra sell", "ST alignment", or "trend confirmation".
+version: 1.0.0
+compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
+metadata:
+  hermes:
+    tags: [trading, tradingview, pine-script, technical-analysis]
+    category: trading
 ---
 
 # Ultra Sensitive SuperTrend — Trading Opportunity Finder

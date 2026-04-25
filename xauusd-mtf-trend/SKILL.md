@@ -2,6 +2,12 @@
 name: xauusd-mtf-trend
 description: |
   Use the XAUUSD MTF Trend Dashboard TradingView indicator to analyze multi-timeframe trend alignment across multiple timeframes and identify high-probability directional bias for XAUUSD and other symbols. This skill triggers when the user wants to: analyze multi-timeframe trends, check MTF alignment, detect cross-timeframe bias, find MTF confluence, or trade with multi-timeframe confirmation. Also triggers when the user runs `xauusd-mtf-trend.cjs` or mentions terms like "MTF trend", "multi timeframe", "timeframe alignment", "MTF dashboard", "trend dashboard", or "cross timeframe".
+version: 1.0.0
+compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
+metadata:
+  hermes:
+    tags: [trading, tradingview, pine-script, technical-analysis]
+    category: trading
 ---
 
 # XAUUSD MTF Trend Dashboard — Trading Opportunity Finder

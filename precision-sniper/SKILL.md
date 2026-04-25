@@ -2,6 +2,12 @@
 name: precision-sniper
 description: |
   Use the Precision Sniper TradingView indicator to analyze any symbol/timeframe and extract grade-based confluence signals. This skill triggers when the user wants to: get high-probability entry signals, analyze EMA confluence, filter trades by grade quality, or use HTF bias alignment for directional confirmation. Also triggers when the user runs `precision-sniper.cjs` or mentions terms like "Precision Sniper", "grade signals", "EMA confluence", "A+ signal", "sniper entries", or "confluence score".
+version: 1.0.0
+compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
+metadata:
+  hermes:
+    tags: [trading, tradingview, pine-script, technical-analysis]
+    category: trading
 ---
 
 # Precision Sniper — Trading Opportunity Finder

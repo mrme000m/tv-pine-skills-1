@@ -2,6 +2,12 @@
 name: smart-money-concepts
 description: |
   Use the Smart Money Concepts [LuxAlgo] TradingView indicator to analyze market structure breaks (BOS/CHoCH), fair value gaps (FVG), order blocks (OB), and equal highs/lows for institutional-grade trade setups. This skill triggers when the user wants to: analyze smart money concepts, detect BOS/CHoCH, find fair value gaps, identify order block breakouts, analyze swing structure, or trade institutional order flow. Also triggers when the user runs `smart-money-concepts.cjs` or mentions terms like "SMC", "smart money", "BOS", "CHoCH", "FVG", "order block", "market structure", "liquidity", or "institutional".
+version: 1.0.0
+compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
+metadata:
+  hermes:
+    tags: [trading, tradingview, pine-script, technical-analysis]
+    category: trading
 ---
 
 # Smart Money Concepts [LuxAlgo] — Trading Opportunity Finder

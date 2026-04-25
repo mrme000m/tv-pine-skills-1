@@ -2,6 +2,12 @@
 name: self-aware-trend-system
 description: |
   Use the Self-Aware Trend System [WillyAlgoTrader] TradingView indicator to analyze any symbol/timeframe and extract adaptive trend-following signals. This skill triggers when the user wants to: analyze trend quality, detect regime changes, get SuperTrend-based trade signals, monitor TQI (Trend Quality Index), or use adaptive asymmetric bands for trade setups. Also triggers when the user runs `self-aware-trend-system.cjs` or mentions terms like "Self-Aware Trend", "WillyAlgoTrader", "TQI", "trend quality", "adaptive SuperTrend", "character flip", or "asymmetric bands".
+version: 1.0.0
+compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
+metadata:
+  hermes:
+    tags: [trading, tradingview, pine-script, technical-analysis]
+    category: trading
 ---
 
 # Self-Aware Trend System [WillyAlgoTrader] — Trading Opportunity Finder

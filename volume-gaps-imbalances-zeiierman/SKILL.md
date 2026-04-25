@@ -1,7 +1,13 @@
 ---
-name: volume-gaps-indicator
+name: volume-gaps-imbalances-zeiierman
 description: |
   Use the Volume Gaps & Imbalances (Zeiierman) TradingView indicator to analyze any symbol/timeframe and extract structural trading signals. This skill triggers when the user wants to: analyze market structure, find order-flow imbalances, identify fair-value gaps/zero-volume voids, detect aggressive institutional buying/selling, or use the Zeiierman volume profile tool for trade setups. Also triggers when the user runs `volume-gaps-imbalances-zeiierman.cjs` or mentions terms like "volume gaps", "Zeiierman", "imbalances", "order-gap", "zero-volume voids", "SMC", or "order-flow analysis". The skill guides running the standalone CLI script, interpreting the JSON output (gaps, profile rows, delta panel), and translating those findings into actionable trading ideas with entry zones, bias, and risk context.
+version: 1.0.0
+compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
+metadata:
+  hermes:
+    tags: [trading, tradingview, pine-script, technical-analysis]
+    category: trading
 ---
 
 # Volume Gaps & Imbalances (Zeiierman) — Trading Opportunity Finder

@@ -2,6 +2,12 @@
 name: quantum-ribbon
 description: |
   Use the Quantum Ribbon Lite TradingView indicator to analyze multi-layer EMA alignment, detect ribbon crossovers, and identify trend strength through 5-layer ribbon momentum analysis. This skill triggers when the user wants to: analyze EMA ribbon alignment, detect ribbon crossovers, measure trend strength from multiple EMAs, find multi-layer confluence, or trade ribbon-based signals. Also triggers when the user runs `quantum-ribbon.cjs` or mentions terms like "quantum ribbon", "EMA ribbon", "ribbon crossover", "multi EMA", "ribbon alignment", or "EMA cloud".
+version: 1.0.0
+compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
+metadata:
+  hermes:
+    tags: [trading, tradingview, pine-script, technical-analysis]
+    category: trading
 ---
 
 # Quantum Ribbon Lite — Trading Opportunity Finder

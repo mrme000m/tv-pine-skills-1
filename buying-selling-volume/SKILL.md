@@ -2,6 +2,12 @@
 name: buying-selling-volume
 description: |
   Use the Buying Selling Volume TradingView indicator to analyze volume pressure, detect buying vs selling dominance, and identify MA cross signals for directional trade setups. This skill triggers when the user wants to: analyze volume pressure, detect buying vs selling volume, find volume-based trend signals, identify volume MA crosses, or trade volume decomposition patterns. Also triggers when the user runs `buying-selling-volume.cjs` or mentions terms like "buying volume", "selling volume", "volume pressure", "volume MA", or "volume decomposition".
+version: 1.0.0
+compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
+metadata:
+  hermes:
+    tags: [trading, tradingview, pine-script, technical-analysis]
+    category: trading
 ---
 
 # Buying Selling Volume — Trading Opportunity Finder
