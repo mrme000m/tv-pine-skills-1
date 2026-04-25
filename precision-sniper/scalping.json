@@ -1,0 +1,7 @@
+{
+  "presetInput": "Scalping",
+  "emaFastLenInput": 5,
+  "emaSlowLenInput": 13,
+  "atrLenInput": 10,
+  "slMultInput": 1.2
+}

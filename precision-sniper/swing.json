@@ -1,0 +1,8 @@
+{
+  "presetInput": "Swing",
+  "emaFastLenInput": 21,
+  "emaSlowLenInput": 55,
+  "emaTrendLenInput": 200,
+  "atrLenInput": 21,
+  "slMultInput": 2.5
+}

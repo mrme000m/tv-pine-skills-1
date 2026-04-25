@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Environment variables / secrets
+.env
+**/.env
+
+# OS files
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Temp files
+*.tmp
+/tmp/
+
+# IDE
+.vscode/
+.idea/
+
+# TradingView credentials (never commit)
+authenticated_cookies.json
+successful_credentials.txt

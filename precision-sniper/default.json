@@ -1,0 +1,16 @@
+{
+  "presetInput": "Auto",
+  "emaFastLenInput": 9,
+  "emaSlowLenInput": 21,
+  "emaTrendLenInput": 55,
+  "minScoreInput": 5,
+  "rsiLenInput": 13,
+  "atrLenInput": 14,
+  "slMultInput": 1.5,
+  "tp1MultInput": 1.0,
+  "tp2MultInput": 2.0,
+  "tp3MultInput": 3.0,
+  "useTrailInput": true,
+  "useStructureSLInput": true,
+  "swingLookbackInput": 10
+}

@@ -1,0 +1,9 @@
+{
+  "presetInput": "Default",
+  "atrLenInput": 13,
+  "baseMultInput": 2.0,
+  "sourceInput": "close",
+  "useTqiInput": true,
+  "qualityStrengthInput": 0.4,
+  "useCharFlipInput": true
+}

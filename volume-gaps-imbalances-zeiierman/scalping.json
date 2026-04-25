@@ -1,0 +1,11 @@
+{
+  "prd": 100,
+  "rows": 30,
+  "src": "hlc3",
+  "width": 60,
+  "sum_sections": 10,
+  "sum_panel_w": 20,
+  "sum_gap_x": 2,
+  "sum_show_label": true,
+  "delta_min_frac": 0.3
+}
