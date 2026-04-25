@@ -50,7 +50,7 @@ const INPUT_MAP = [
   { variable: 'equalHighsLowsLengthInput', tvInputId: 'in_30', type: 'int', default: 3 },
   { variable: 'equalHighsLowsThresholdInput', tvInputId: 'in_31', type: 'float', default: 0.1 },
   { variable: 'equalHighsLowsSizeInput', tvInputId: 'in_32', type: 'string', default: 'TINY' },
-  { variable: 'showFairValueGapsInput', tvInputId: 'in_33', type: 'bool', default: false },
+  { variable: 'showFairValueGapsInput', tvInputId: 'in_33', type: 'bool', default: true },
   { variable: 'fairValueGapsThresholdInput', tvInputId: 'in_34', type: 'bool', default: true },
   { variable: 'fairValueGapsTimeframeInput', tvInputId: 'in_35', type: 'timeframe', default: '' },
   { variable: 'fairValueGapsBullColorInput', tvInputId: 'in_36', type: 'color', default: 'color.new(#00ff68, 70)' },
@@ -113,10 +113,20 @@ function normalizeTf(tf) {
 function _round(val, d = 2) { return typeof val === 'number' ? Math.round(val * 10 ** d) / 10 ** d : val; }
 function _coerce(val, type) { const s = String(val); if (type === 'bool') return s.toLowerCase() === 'true' || s === '1'; if (type === 'int') return parseInt(s, 10); if (type === 'float') return parseFloat(s); return val; }
 
+const DEFAULT_INPUT_OVERRIDES = {
+  // FVGs are core SMC data; enable by default unless explicitly disabled by user.
+  showFairValueGapsInput: true
+};
+
 function applyInputs(indicator, inputs) {
-  if (!inputs || Object.keys(inputs).length === 0) return;
-  console.log(`📝 Applying input overrides...`);
-  for (const [key, value] of Object.entries(inputs)) {
+  const userInputs = inputs || {};
+  const mergedInputs = { ...DEFAULT_INPUT_OVERRIDES, ...userInputs };
+  if (Object.keys(mergedInputs).length === 0) return;
+  console.log('📝 Applying input configuration...');
+  if (!Object.prototype.hasOwnProperty.call(userInputs, 'showFairValueGapsInput')) {
+    console.log('   ℹ️  Default override: showFairValueGapsInput=true');
+  }
+  for (const [key, value] of Object.entries(mergedInputs)) {
     const mapping = INPUT_MAP.find(m => m.variable === key);
     if (!mapping) { console.warn(`   ⚠️  Unknown input: ${key}`); continue; }
     try { const tvInputDef = indicator.inputs[mapping.tvInputId]; if (!tvInputDef) { console.warn(`   ⚠️  Input ${key} not in indicator`); continue; } const typed = _coerce(value, mapping.type); indicator.setOption(mapping.tvInputId, typed); console.log(`   ✅ ${key} → ${mapping.tvInputId}: ${JSON.stringify(typed)} (${tvInputDef.type})`); } catch (e) { console.warn(`   ⚠️  ${key} failed: ${e.message}`); }
@@ -129,6 +139,107 @@ function _colorToHex(c) {
   const hex = (c >>> 0).toString(16).padStart(8, '0');
   return hex.slice(2); // strip alpha
 }
+
+function _toNumber(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function _extractPeriodClose(period) {
+  if (!period || typeof period !== 'object') return null;
+  return _toNumber(period.close ?? period.c ?? period.Close ?? period.cl);
+}
+
+function _extractPeriodTime(period) {
+  if (!period || typeof period !== 'object') return null;
+  return _toNumber(period.time ?? period.t ?? period.ts ?? period.timestamp);
+}
+
+function _resolveLatestClose(periods) {
+  if (!Array.isArray(periods) || periods.length === 0) return { close: null, time: null, source: 'none' };
+  let latestByTime = null;
+  for (const p of periods) {
+    const close = _extractPeriodClose(p);
+    const time = _extractPeriodTime(p);
+    if (close == null) continue;
+    if (time == null) {
+      if (!latestByTime) latestByTime = { close, time: null };
+      continue;
+    }
+    if (!latestByTime || latestByTime.time == null || time > latestByTime.time) {
+      latestByTime = { close, time };
+    }
+  }
+  if (latestByTime) return { ...latestByTime, source: latestByTime.time != null ? 'chart-max-time' : 'chart-first-valid' };
+  return { close: null, time: null, source: 'none' };
+}
+
+function _resolveLatestStructureLevel(bosLabels, chochLabels) {
+  const events = [...(bosLabels || []), ...(chochLabels || [])].filter(e => _toNumber(e?.y) != null && _toNumber(e?.x) != null);
+  if (events.length === 0) return null;
+  events.sort((a, b) => (a.x || 0) - (b.x || 0));
+  const latest = events[events.length - 1];
+  return { x: latest.x, y: latest.y, type: latest.type };
+}
+
+function _pctDiff(a, b) {
+  if (_toNumber(a) == null || _toNumber(b) == null || b === 0) return 0;
+  return Math.abs((a - b) / b);
+}
+
+function _normalizeLineStyle(style) {
+  const s = String(style || '').toLowerCase();
+  if (s === 'dsh' || s === 'dashed') return 'dashed';
+  if (s === 'sol' || s === 'solid') return 'solid';
+  if (s === 'dot' || s === 'dotted') return 'dotted';
+  return s || null;
+}
+
+function _inferLabelDirection(label) {
+  const st = String(label?.st || '').toLowerCase();
+  if (st === 'lup') return { isBullish: true, isBearish: false, hasExplicitDirection: true };
+  if (st === 'ldn') return { isBullish: false, isBearish: true, hasExplicitDirection: true };
+  return { isBullish: false, isBearish: false, hasExplicitDirection: false };
+}
+
+function _findStructureLineForLabel(label, lines) {
+  const lx = _toNumber(label?.x);
+  const ly = _toNumber(label?.y);
+  if (lx == null || ly == null) return null;
+  const EPS = 1e-4;
+  for (const ln of lines || []) {
+    const y1 = _toNumber(ln?.y1);
+    const x1 = _toNumber(ln?.x1);
+    const x2 = _toNumber(ln?.x2);
+    if (y1 == null || x1 == null || x2 == null) continue;
+    if (Math.abs(y1 - ly) > EPS) continue;
+    const minX = Math.min(x1, x2) - 1;
+    const maxX = Math.max(x1, x2) + 1;
+    if (lx >= minX && lx <= maxX) return ln;
+  }
+  return null;
+}
+
+function _findEqLineForLabel(label, lines) {
+  const lx = _toNumber(label?.x);
+  const ly = _toNumber(label?.y);
+  if (lx == null || ly == null) return null;
+  const EPS = 100;
+  for (const ln of lines || []) {
+    const normStyle = _normalizeLineStyle(ln?.st);
+    const x1 = _toNumber(ln?.x1);
+    const x2 = _toNumber(ln?.x2);
+    const y1 = _toNumber(ln?.y1);
+    const y2 = _toNumber(ln?.y2);
+    if (normStyle !== 'dotted' || x1 == null || x2 == null || y1 == null || y2 == null) continue;
+    const minX = Math.min(x1, x2) - 1;
+    const maxX = Math.max(x1, x2) + 1;
+    if (lx < minX || lx > maxX) continue;
+    if (Math.abs(y1 - ly) <= EPS || Math.abs(y2 - ly) <= EPS) return ln;
+  }
+  return null;
+}
+
 function parseGraphicOutput(rawData, timeframe, chartPeriods) {
   const graphic = rawData?.graphic || {};
   const boxes = Object.values(graphic.dwgBoxes ?? graphic.boxes ?? graphic.dwgboxes ?? {});
@@ -140,21 +251,37 @@ function parseGraphicOutput(rawData, timeframe, chartPeriods) {
   // Infer bullish/bearish from y-value trend (higher = bullish break, lower = bearish break)
   const rawBOS = labels.filter(l => /bos/i.test(String(l.t))).sort((a, b) => (a.x || 0) - (b.x || 0));
   const bosLabels = rawBOS.map((l, i) => {
+    const matchedLine = _findStructureLineForLabel(l, lines);
+    const lineStyle = _normalizeLineStyle(matchedLine?.st);
+    const scope = lineStyle === 'dashed' ? 'internal' : lineStyle === 'solid' ? 'swing' : null;
+    const inferred = _inferLabelDirection(l);
     const prev = i > 0 ? rawBOS[i - 1] : null;
     const yDir = prev ? (l.y > prev.y ? 'up' : l.y < prev.y ? 'down' : 'flat') : 'unknown';
+    const isBullish = inferred.hasExplicitDirection ? inferred.isBullish : yDir === 'up';
+    const isBearish = inferred.hasExplicitDirection ? inferred.isBearish : yDir === 'down';
     return {
       text: l.t, x: l.x, y: l.y, color: l.ci,
-      type: 'BOS', isBullish: yDir === 'up', isBearish: yDir === 'down',
+      type: 'BOS', isBullish, isBearish,
+      scope,
+      lineStyle,
       time: l.time
     };
   });
   const rawCHoCH = labels.filter(l => /choch|choc/i.test(String(l.t))).sort((a, b) => (a.x || 0) - (b.x || 0));
   const chochLabels = rawCHoCH.map((l, i) => {
+    const matchedLine = _findStructureLineForLabel(l, lines);
+    const lineStyle = _normalizeLineStyle(matchedLine?.st);
+    const scope = lineStyle === 'dashed' ? 'internal' : lineStyle === 'solid' ? 'swing' : null;
+    const inferred = _inferLabelDirection(l);
     const prev = i > 0 ? rawCHoCH[i - 1] : null;
     const yDir = prev ? (l.y > prev.y ? 'up' : l.y < prev.y ? 'down' : 'flat') : 'unknown';
+    const isBullish = inferred.hasExplicitDirection ? inferred.isBullish : yDir === 'up';
+    const isBearish = inferred.hasExplicitDirection ? inferred.isBearish : yDir === 'down';
     return {
       text: l.t, x: l.x, y: l.y, color: l.ci,
-      type: 'CHoCH', isBullish: yDir === 'up', isBearish: yDir === 'down',
+      type: 'CHoCH', isBullish, isBearish,
+      scope,
+      lineStyle,
       time: l.time
     };
   });
@@ -169,10 +296,13 @@ function parseGraphicOutput(rawData, timeframe, chartPeriods) {
     isMitigated: b.ex === false
   }));
 
+  const chartPrice = _resolveLatestClose(chartPeriods || []);
+  const legacyTail = Array.isArray(chartPeriods) && chartPeriods.length > 0 ? chartPeriods[chartPeriods.length - 1] : null;
+  const legacyTailClose = _extractPeriodClose(legacyTail);
+  const latestClose = chartPrice.close ?? legacyTailClose;
+
   // OB boxes: larger boxes representing order blocks
   // Infer bullish/bearish from position relative to latest close (below = demand/bullish, above = supply/bearish)
-  const lastChartPeriod = (chartPeriods || []).length > 0 ? chartPeriods[chartPeriods.length - 1] : null;
-  const latestClose = lastChartPeriod?.close ?? lastChartPeriod?.c ?? null;
   const obBoxes = boxes.filter(b => /ob|block/i.test(String(b.t)) || (b.x2 !== undefined && b.x1 !== undefined && Math.abs(b.x2 - b.x1) > 5 && !/fvg/i.test(String(b.t)) && b.t !== '•')).map(b => {
     const top = Math.max(b.y1||0, b.y2||0);
     const bottom = Math.min(b.y1||0, b.y2||0);
@@ -183,26 +313,37 @@ function parseGraphicOutput(rawData, timeframe, chartPeriods) {
       if (mid < latestClose) isBullish = true;
       else if (mid > latestClose) isBearish = true;
     }
+    const direction = isBullish ? 'bullish' : isBearish ? 'bearish' : null;
     return {
       top, bottom, left: b.x1, right: b.x2,
       color: b.c, text: b.t,
       size: Math.abs(top - bottom),
-      isBullish, isBearish,
+      isBullish, isBearish, direction,
       isMitigated: b.ex === false
     };
   });
 
-  // EQH/EQL lines
-  const eqhLines = lines.filter(l => /eqh|eql/i.test(String(l.t))).map(l => ({
-    price: l.y1 || l.price || l.level,
-    color: l.ci, style: l.st,
-    type: /eql/i.test(String(l.t)) ? 'EQL' : 'EQH'
-  }));
+  // EQH/EQL are rendered as labels (EQH/EQL) plus dotted connector lines.
+  const eqLabels = labels.filter(l => /^eqh$|^eql$/i.test(String(l.t))).sort((a, b) => (a.x || 0) - (b.x || 0));
+  const eqhLines = eqLabels.map(l => {
+    const line = _findEqLineForLabel(l, lines);
+    return {
+      price: _toNumber(l.y) ?? _toNumber(line?.y2) ?? _toNumber(line?.y1) ?? _toNumber(line?.price) ?? _toNumber(line?.level),
+      color: line?.ci ?? l.ci,
+      style: _normalizeLineStyle(line?.st),
+      type: /eql/i.test(String(l.t)) ? 'EQL' : 'EQH',
+      x: l.x,
+      y: l.y
+    };
+  });
 
   // Trend lines (breaker blocks, liquidity sweeps)
-  const trendLines = lines.filter(l => l.st === 'solid' || l.st === 'dashed').map(l => ({
+  const trendLines = lines.filter(l => {
+    const style = _normalizeLineStyle(l.st);
+    return style === 'solid' || style === 'dashed';
+  }).map(l => ({
     from: { x: l.x1, y: l.y1 }, to: { x: l.x2, y: l.y2 },
-    color: l.ci, style: l.st,
+    color: l.ci, style: _normalizeLineStyle(l.st),
     type: l.y1 > l.y2 ? 'resistance' : 'support'
   }));
 
@@ -228,6 +369,21 @@ function parseGraphicOutput(rawData, timeframe, chartPeriods) {
 
   const biasScore = (hasBullishBOS ? 1 : 0) + (hasBearishBOS ? -1 : 0) + (hasBullishCHoCH ? 0.5 : 0) + (hasBearishCHoCH ? -0.5 : 0);
   const structureBias = biasScore > 0.5 ? 'BULLISH' : biasScore < -0.5 ? 'BEARISH' : 'NEUTRAL';
+  const latestStructure = _resolveLatestStructureLevel(bosLabels, chochLabels);
+
+  const integrityWarnings = [];
+  if (latestClose != null && legacyTailClose != null) {
+    const tailDivergence = _pctDiff(latestClose, legacyTailClose);
+    if (tailDivergence > 0.02) {
+      integrityWarnings.push(`Price integrity warning: chart tail close diverges from latest-time close by ${_round(tailDivergence * 100, 2)}%. Using latest-time close ${_round(latestClose)}.`);
+    }
+  }
+  if (latestClose != null && latestStructure?.y != null) {
+    const structureDivergence = _pctDiff(latestClose, latestStructure.y);
+    if (structureDivergence > 0.02) {
+      integrityWarnings.push(`Price integrity warning: price ${_round(latestClose)} diverges from latest ${latestStructure.type} level ${_round(latestStructure.y)} by ${_round(structureDivergence * 100, 2)}%.`);
+    }
+  }
 
   // Liquidity levels
   const liquidityLevels = [...eqhLines.map(l => l.price), ...trendLines.map(l => Math.max(l.from.y, l.to.y))].filter(Boolean);
@@ -237,20 +393,53 @@ function parseGraphicOutput(rawData, timeframe, chartPeriods) {
     bosCount: bosLabels.length, chochCount: chochLabels.length, fvgCount: fvgBoxes.length, obCount: obBoxes.length, eqhCount: eqhLines.length,
     activeFVGs: activeFVGs.length, activeOBs: activeOBs.length, mitigatedFVGs: mitigatedFVGs.length, mitigatedOBs: mitigatedOBs.length,
     recentBOS: recentBOS.length, recentCHoCH: recentCHoCH.length,
-    structureBias, biasScore: _round(biasScore, 2), liquidityLevelCount: liquidityLevels.length
+    structureBias, biasScore: _round(biasScore, 2), liquidityLevelCount: liquidityLevels.length,
+    currentPrice: latestClose != null ? _round(latestClose, 2) : null,
+    priceIntegrityWarnings: integrityWarnings.length
   };
 
   const signals = _generateSignals(structureBias, activeOBs, activeFVGs, latestClose, recentBOS, recentCHoCH);
-  const narrative = _generateNarrative(summary, signals, latestClose);
+  const narrative = _generateNarrative(summary, signals, latestClose, integrityWarnings);
   const agenticScore = _computeAgenticScore(summary);
 
-  return { summary, bosLabels: bosLabels.slice(-10), chochLabels: chochLabels.slice(-10), fvgBoxes: fvgBoxes.slice(-10), obBoxes: obBoxes.slice(-10), eqhLines: eqhLines.slice(-10), trendLines: trendLines.slice(-10), activeOBs: activeOBs.slice(-5), activeFVGs: activeFVGs.slice(-5), signals, narrative, meta: { pineId: PINE_ID, scriptName: SCRIPT_NAME, timeframe, periodCount: periods.length, dataSource: 'graphic+periods' }, enhanced: { signals, narrative, agenticScore } };
+  return {
+    summary,
+    bosLabels: bosLabels.slice(-10),
+    chochLabels: chochLabels.slice(-10),
+    fvgBoxes: fvgBoxes.slice(-10),
+    obBoxes: obBoxes.slice(-10),
+    eqhLines: eqhLines.slice(-10),
+    trendLines: trendLines.slice(-10),
+    activeOBs: activeOBs.slice(-5),
+    activeFVGs: activeFVGs.slice(-5),
+    signals,
+    narrative,
+    meta: {
+      pineId: PINE_ID,
+      scriptName: SCRIPT_NAME,
+      timeframe,
+      periodCount: periods.length,
+      dataSource: 'graphic+periods',
+      price: {
+        close: latestClose,
+        source: chartPrice.source,
+        timestamp: chartPrice.time,
+        legacyTailClose
+      },
+      integrity: {
+        warningCount: integrityWarnings.length,
+        warnings: integrityWarnings,
+        latestStructureLevel: latestStructure ? { type: latestStructure.type, price: latestStructure.y, x: latestStructure.x } : null
+      }
+    },
+    enhanced: { signals, narrative, agenticScore }
+  };
 }
 
 function _generateSignals(structureBias, activeOBs, activeFVGs, latestClose, recentBOS, recentCHoCH) {
   const generated = [];
   const direction = structureBias === 'BULLISH' ? 'long' : structureBias === 'BEARISH' ? 'short' : 'neutral';
-  if (direction === 'neutral' || activeOBs.length === 0) return generated;
+  if (direction === 'neutral' || activeOBs.length === 0 || _toNumber(latestClose) == null) return generated;
 
   // Find nearest OB
   const sortedOBs = activeOBs.filter(b => b.bottom && b.top).sort((a, b) => {
@@ -273,13 +462,14 @@ function _generateSignals(structureBias, activeOBs, activeFVGs, latestClose, rec
   return generated;
 }
 
-function _generateNarrative(summary, signals, latestClose) {
+function _generateNarrative(summary, signals, latestClose, integrityWarnings = []) {
   const parts = [`SMC Structure: ${summary.bosCount} BOS, ${summary.chochCount} CHoCH, ${summary.fvgCount} FVG, ${summary.obCount} OB, ${summary.eqhCount} EQH/EQL.`];
   parts.push(`Active: ${summary.activeOBs} OBs, ${summary.activeFVGs} FVGs. Bias: ${summary.structureBias}.`);
   if (latestClose) parts.push(`Price: ${_round(latestClose)}.`);
   const warnings = [];
   if (summary.bosCount === 0 && summary.chochCount === 0) warnings.push('No BOS/CHoCH detected — structure may be weak or unclear.');
   if (summary.activeOBs === 0) warnings.push('No active order blocks — look for fresh structure forming.');
+  warnings.push(...integrityWarnings);
   const watchlist = ['Monitor OB mitigation as price sweeps liquidity.', 'BOS confirms trend continuation; CHoCH signals potential reversal.', 'EQH/EQL are liquidity targets — watch for sweeps.'];
   return { marketStructure: parts.join(' '), primaryOpportunity: signals[0]?.rationale || 'Wait for clear structure bias.', warnings, watchlist };
 }

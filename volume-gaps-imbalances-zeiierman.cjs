@@ -1001,6 +1001,11 @@ function transformForAgentMode(result, args) {
       agenticScore: enhanced.agenticScore,
     },
     schemaVersion: 'agent-ready-v2.0.0',
+    // Backward compatibility fields - ensure these are present for downstream parsers
+    summary,
+    currentBar: { time: summary.lastPrice != null ? Date.now() : null, close: summary.lastPrice }, // Approximate current bar with last price
+    recentBars: profile.rows, // Use profile rows as recent bars proxy
+    signals: enhanced.signals,
   };
 }
 

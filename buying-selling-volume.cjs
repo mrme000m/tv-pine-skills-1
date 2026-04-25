@@ -10,7 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const SCRIPT_DIR = path.dirname(__filename);
-require('dotenv').config({ path: path.join(SCRIPT_DIR, '.env') });
+require('dotenv').config({ path: path.join(SCRIPT_DIR, '.env'), quiet: true });
 const tv = require('./tv-optimized.cjs');
 
 const PINE_ID = 'PUB;28a4da159ce246dab2cb6524c25f950f';
@@ -28,6 +28,10 @@ const PRESETS = {
   default: { lengthMA1: 10, lengthMA2: 10, maType: 'SMA' },
   swing: { lengthMA1: 50, lengthMA2: 200, maType: 'SMA' },
 };
+
+let STRICT_JSON_STDOUT = false;
+function info(...args) { if (!STRICT_JSON_STDOUT) console.log(...args); }
+function warn(...args) { if (!STRICT_JSON_STDOUT) console.warn(...args); }
 
 function parseArgs(argv) {
   const args = { _symbol: argv[0]?.toUpperCase() || null, symbol: 'BTCUSDT', tf: '15m', bars: 500, json: false, out: null, agent: false, verbose: false, dryRun: false, inputs: {} };
@@ -47,7 +51,7 @@ function parseArgs(argv) {
     else if (a === '--dry-run') args.dryRun = true;
     else if (a === '--help' || a === '-h') args.help = true;
   }
-  if (args.preset && PRESETS[args.preset]) { args.inputs = { ...args.inputs, ...PRESETS[args.preset] }; console.log(`🎚️  Using preset: ${args.preset}`); }
+  if (args.preset && PRESETS[args.preset]) { args.inputs = { ...args.inputs, ...PRESETS[args.preset] }; }
   return args;
 }
 
@@ -75,31 +79,67 @@ function _coerce(val, type) { const s = String(val); if (type === 'bool') return
 
 function applyInputs(indicator, inputs) {
   if (!inputs || Object.keys(inputs).length === 0) return;
-  console.log(`📝 Applying input overrides...`);
+  info(`📝 Applying input overrides...`);
   for (const [key, value] of Object.entries(inputs)) {
     const mapping = INPUT_MAP.find(m => m.variable === key);
-    if (!mapping) { console.warn(`   ⚠️  Unknown input: ${key}`); continue; }
-    try { const tvInputDef = indicator.inputs[mapping.tvInputId]; if (!tvInputDef) { console.warn(`   ⚠️  Input ${key} not in indicator`); continue; } const typed = _coerce(value, mapping.type); indicator.setOption(mapping.tvInputId, typed); console.log(`   ✅ ${key} → ${mapping.tvInputId}: ${JSON.stringify(typed)} (${tvInputDef.type})`); } catch (e) { console.warn(`   ⚠️  ${key} failed: ${e.message}`); }
+    if (!mapping) { warn(`   ⚠️  Unknown input: ${key}`); continue; }
+    try { const tvInputDef = indicator.inputs[mapping.tvInputId]; if (!tvInputDef) { warn(`   ⚠️  Input ${key} not in indicator`); continue; } const typed = _coerce(value, mapping.type); indicator.setOption(mapping.tvInputId, typed); info(`   ✅ ${key} → ${mapping.tvInputId}: ${JSON.stringify(typed)} (${tvInputDef.type})`); } catch (e) { warn(`   ⚠️  ${key} failed: ${e.message}`); }
   }
+}
+
+function _toNumber(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function _field(obj, names) {
+  if (!obj) return null;
+  for (const name of names) {
+    if (obj[name] !== undefined && obj[name] !== null) return obj[name];
+  }
+  return null;
+}
+
+function _priceOrNull(v) {
+  const n = _toNumber(v);
+  return n != null && n > 0 ? n : null;
 }
 
 function parseOutput(rawData, timeframe) {
   const periods = rawData?.periods || [];
   const ohlcv = rawData?.ohlcv || [];
   const bars = [];
+  const ohlcvByTime = new Map();
+  for (const c of ohlcv) {
+    const t = _toNumber(_field(c, ['$time', 'time', 'timestamp']));
+    if (t != null) ohlcvByTime.set(t, c);
+  }
 
   for (let i = 0; i < periods.length; i++) {
     const p = periods[i];
-    const o = ohlcv[i];
+    const pTime = _toNumber(_field(p, ['$time', 'time', 'timestamp']));
+    const o = (pTime != null && ohlcvByTime.has(pTime)) ? ohlcvByTime.get(pTime) : ohlcv[i];
+    const buyRaw = _toNumber(_field(p, ['BuyVolume', 'buyVolume', 'Buy Volume']));
+    const sellRaw = _toNumber(_field(p, ['SellVolume', 'sellVolume', 'Sell Volume']));
+    const maBuyRaw = _toNumber(_field(p, ['MABuy', 'maBuy', 'MA Buy']));
+    const maSellRaw = _toNumber(_field(p, ['MASell', 'maSell', 'MA Sell']));
+    const buyVolume = buyRaw == null ? null : Math.abs(buyRaw);
+    const sellVolume = sellRaw == null ? null : Math.abs(sellRaw);
     const entry = {
-      time: p.time, barIndex: p.index,
-      buyVolume: p.BuyVolume ?? p.buyVolume ?? p['Buy Volume'] ?? null,
-      sellVolume: p.SellVolume ?? p.sellVolume ?? p['Sell Volume'] ?? null,
-      maBuy: p.MABuy ?? p.maBuy ?? null,
-      maSell: p.MASell ?? p.maSell ?? null,
-      barColor: p.BarColor ?? p.barColor ?? p['Bar Color'] ?? null,
-      backgroundColor: p.BackgroundColor ?? p.backgroundColor ?? p['Background Color'] ?? null,
-      open: o?.open ?? p.open, high: o?.high ?? p.high, low: o?.low ?? p.low, close: o?.close ?? p.close,
+      time: pTime ?? _toNumber(_field(o, ['$time', 'time', 'timestamp'])),
+      barIndex: _toNumber(_field(p, ['index', '$i'])) ?? i,
+      buyVolume,
+      sellVolume,
+      buyVolumeRaw: buyRaw,
+      sellVolumeRaw: sellRaw,
+      maBuy: maBuyRaw,
+      maSell: maSellRaw,
+      barColor: _toNumber(_field(p, ['BarColor', 'barColor', 'Bar Color'])),
+      backgroundColor: _toNumber(_field(p, ['BackgroundColor', 'backgroundColor', 'Background Color'])),
+      open: _priceOrNull(_field(o, ['open', 'o'])) ?? _priceOrNull(_field(p, ['open', 'o'])),
+      high: _priceOrNull(_field(o, ['high', 'h'])) ?? _priceOrNull(_field(p, ['high', 'h'])),
+      low: _priceOrNull(_field(o, ['low', 'l'])) ?? _priceOrNull(_field(p, ['low', 'l'])),
+      close: _priceOrNull(_field(o, ['close', 'c'])) ?? _priceOrNull(_field(p, ['close', 'c'])),
     };
 
     // Resolve bar color state
@@ -107,8 +147,8 @@ function parseOutput(rawData, timeframe) {
     entry.backgroundState = _resolveBackgroundColor(entry.backgroundColor);
 
     // Pressure ratio
-    const totalVolume = (entry.buyVolume || 0) + (entry.sellVolume || 0);
-    entry.volumeDominance = totalVolume > 0 ? (entry.buyVolume - entry.sellVolume) / totalVolume : 0;
+    const totalVolume = (entry.buyVolume ?? 0) + (entry.sellVolume ?? 0);
+    entry.volumeDominance = totalVolume > 0 ? ((entry.buyVolume ?? 0) - (entry.sellVolume ?? 0)) / totalVolume : 0;
 
     // MA cross detection
     entry.maCross = _detectMACross(periods, i);
@@ -129,6 +169,7 @@ function parseOutput(rawData, timeframe) {
 
   // Cross summary
   const crossSignals = bars.filter(b => b.maCross).slice(-5);
+  const currentBar = bars[bars.length - 1] || null;
 
   const summary = { totalBars: bars.length, buyDominant, sellDominant, neutral, dominanceRatio: _round(dominanceRatio), bgConsensus, recentCrosses: crossSignals.length };
 
@@ -136,7 +177,7 @@ function parseOutput(rawData, timeframe) {
   const narrative = _generateNarrative(summary, signals);
   const agenticScore = _computeAgenticScore(bars.length, dominanceRatio, crossSignals.length);
 
-  return { summary, bars: bars.slice(-20), recentCrosses: crossSignals, signals, narrative, meta: { pineId: PINE_ID, scriptName: SCRIPT_NAME, timeframe, periodCount: periods.length, dataSource: 'periods' }, enhanced: { signals, narrative, agenticScore } };
+  return { summary, currentBar, bars: bars.slice(-20), recentCrosses: crossSignals, signals, narrative, meta: { pineId: PINE_ID, scriptName: SCRIPT_NAME, timeframe, periodCount: periods.length, dataSource: 'periods' }, enhanced: { signals, narrative, agenticScore } };
 }
 
 function _resolveBarColor(code) {
@@ -152,13 +193,20 @@ function _resolveBackgroundColor(code) {
 function _detectMACross(periods, idx) {
   if (idx < 1) return null;
   const curr = periods[idx], prev = periods[idx - 1];
+
+  const currBg = _toNumber(_field(curr, ['BackgroundColor', 'backgroundColor', 'Background Color']));
+  const prevBg = _toNumber(_field(prev, ['BackgroundColor', 'backgroundColor', 'Background Color']));
+  if (currBg === 4 && prevBg !== 4) return 'BULLISH_CROSS';
+  if (currBg === 5 && prevBg !== 5) return 'BEARISH_CROSS';
+
   const currMA1 = curr.MABuy ?? curr.maBuy ?? curr['MA Buy'] ?? null;
   const currMA2 = curr.MASell ?? curr.maSell ?? curr['MA Sell'] ?? null;
   const prevMA1 = prev.MABuy ?? prev.maBuy ?? prev['MA Buy'] ?? null;
   const prevMA2 = prev.MASell ?? prev.maSell ?? prev['MA Sell'] ?? null;
   if (currMA1 === null || currMA2 === null || prevMA1 === null || prevMA2 === null) return null;
-  if (prevMA1 <= prevMA2 && currMA1 > currMA2) return 'BULLISH_CROSS';
-  if (prevMA1 >= prevMA2 && currMA1 < currMA2) return 'BEARISH_CROSS';
+  const c1 = Math.abs(currMA1), c2 = Math.abs(currMA2), p1 = Math.abs(prevMA1), p2 = Math.abs(prevMA2);
+  if (p1 <= p2 && c1 > c2) return 'BULLISH_CROSS';
+  if (p1 >= p2 && c1 < c2) return 'BEARISH_CROSS';
   return null;
 }
 
@@ -203,7 +251,7 @@ function _computeAgenticScore(totalBars, dominanceRatio, recentCrosses) {
 }
 
 function transformForAgentMode(result, args) {
-  const { summary, bars, recentCrosses, signals, narrative, meta, enhanced } = result;
+  const { summary, currentBar, bars, recentCrosses, signals, narrative, meta, enhanced } = result;
   return {
     status: 'ok', exitCode: EXIT_CODES.SUCCESS, timestamp: new Date().toISOString(),
     execution: { durationMs: meta.durationMs, attempts: 1 },
@@ -212,6 +260,10 @@ function transformForAgentMode(result, args) {
     latestBars: bars.slice(-5).map(b => ({ time: b.time, close: b.close, buyVolume: b.buyVolume, sellVolume: b.sellVolume, barState: b.barColorState, bgState: b.backgroundState, dominance: b.volumeDominance })),
     recentCrosses: recentCrosses.map(c => ({ time: c.time, type: c.maCross, price: c.close })),
     opportunities: signals.map(s => ({ rank: s.rank, setup: s.setupType, direction: s.direction, confidence: s.confidence, confluenceScore: s.confluenceScore, distanceFromPrice: null, isStale: false, rationale: s.rationale })),
+    summary,
+    currentBar,
+    recentBars: bars,
+    signals,
     narrative, conformance: { hasValidData: summary.totalBars > 0, agenticScore: enhanced.agenticScore },
     schemaVersion: 'agent-ready-v2.0.0',
   };
@@ -266,7 +318,7 @@ async function runWebSocket(symbol, tf, bars, startTime, inputs) {
       try { client.end(); } catch {}
       return parsed;
     } catch (err) {
-      if (/maximum number of studies/i.test(err.message) && attempt < 3) { console.log(`⚠️ Retry ${attempt}/3...`); try { chart.delete(); } catch {} try { client.end(); } catch {} await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
+      if (/maximum number of studies/i.test(err.message) && attempt < 3) { info(`⚠️ Retry ${attempt}/3...`); try { chart.delete(); } catch {} try { client.end(); } catch {} await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
       throw err;
     } finally { try { study.remove(); } catch {} try { chart.delete(); } catch {} try { client.end(); } catch {} }
   }
@@ -274,14 +326,20 @@ async function runWebSocket(symbol, tf, bars, startTime, inputs) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  STRICT_JSON_STDOUT = args.json === true;
   if (args.help || (!args._symbol && process.argv.length <= 2)) { printUsage(); process.exit(0); }
   const startTime = Date.now();
-  console.log(`\n📊 Running: ${PINE_ID} | ${args.symbol} | ${args.tf} | ${args.bars} bars`);
-  if (args.dryRun) { console.log('\n🏜️ DRY RUN'); console.log(JSON.stringify({ status: 'dry_run', ...args, timestamp: new Date().toISOString() }, null, 2)); process.exit(EXIT_CODES.SUCCESS); }
+  info(`\n📊 Running: ${PINE_ID} | ${args.symbol} | ${args.tf} | ${args.bars} bars`);
+  if (args.dryRun) {
+    const dry = JSON.stringify({ status: 'dry_run', ...args, timestamp: new Date().toISOString() }, null, 2);
+    if (args.json) console.log(dry);
+    else { info('\n🏜️ DRY RUN'); info(dry); }
+    process.exit(EXIT_CODES.SUCCESS);
+  }
   try {
     const result = await runWebSocket(args.symbol, args.tf, args.bars, startTime, args.inputs);
-    if (args.verbose) console.log(`\n✓ Completed in ${result.meta.durationMs}ms`);
-    if (args.json) { const output = args.agent ? transformForAgentMode(result, args) : result; const json = JSON.stringify(output, null, 2); if (args.out) { fs.writeFileSync(args.out, json); console.log(`✅ Saved to ${args.out}`); } else console.log(json); }
+    if (args.verbose) info(`\n✓ Completed in ${result.meta.durationMs}ms`);
+    if (args.json) { const output = args.agent ? transformForAgentMode(result, args) : result; const json = JSON.stringify(output, null, 2); if (args.out) { fs.writeFileSync(args.out, json); info(`✅ Saved to ${args.out}`); } else console.log(json); }
     else printResults(result);
     process.exit(EXIT_CODES.SUCCESS);
   } catch (err) { const isCritical = /SESSION|SIGNATURE|connection/i.test(err.message); console.error(`\n❌ Error: ${err.message}`); process.exit(isCritical ? EXIT_CODES.CRITICAL : EXIT_CODES.VALIDATION); }

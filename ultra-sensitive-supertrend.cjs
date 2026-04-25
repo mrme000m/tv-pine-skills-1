@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const SCRIPT_DIR = path.dirname(__filename);
-require('dotenv').config({ path: path.join(SCRIPT_DIR, '.env') });
+require('dotenv').config({ path: path.join(SCRIPT_DIR, '.env'), quiet: true });
 const tv = require('./tv-optimized.cjs');
 
 const PINE_ID = 'PUB;fc33f2d98699414a8585923116dbd959';
@@ -23,6 +23,10 @@ const INPUT_MAP = [
   { variable: 'showLabels', tvInputId: 'in_5', type: 'bool', default: true },
   { variable: 'showBG', tvInputId: 'in_6', type: 'bool', default: true }
 ];
+
+let STRICT_JSON_STDOUT = false;
+function info(...args) { if (!STRICT_JSON_STDOUT) console.log(...args); }
+function warn(...args) { if (!STRICT_JSON_STDOUT) console.warn(...args); }
 
 function parseArgs(argv) {
   const args = { _symbol: argv[0]?.toUpperCase() || null, symbol: 'BTCUSDT', tf: '15m', bars: 500, json: false, out: null, agent: false, verbose: false, dryRun: false, inputs: {} };
@@ -68,11 +72,11 @@ function _coerce(val, type) { const s = String(val); if (type === 'bool') return
 
 function applyInputs(indicator, inputs) {
   if (!inputs || Object.keys(inputs).length === 0) return;
-  console.log(`📝 Applying input overrides...`);
+  info(`📝 Applying input overrides...`);
   for (const [key, value] of Object.entries(inputs)) {
     const mapping = INPUT_MAP.find(m => m.variable === key);
-    if (!mapping) { console.warn(`   ⚠️  Unknown input: ${key}`); continue; }
-    try { const tvInputDef = indicator.inputs[mapping.tvInputId]; if (!tvInputDef) { console.warn(`   ⚠️  Input ${key} not in indicator`); continue; } const typed = _coerce(value, mapping.type); indicator.setOption(mapping.tvInputId, typed); console.log(`   ✅ ${key} → ${mapping.tvInputId}: ${JSON.stringify(typed)} (${tvInputDef.type})`); } catch (e) { console.warn(`   ⚠️  ${key} failed: ${e.message}`); }
+    if (!mapping) { warn(`   ⚠️  Unknown input: ${key}`); continue; }
+    try { const tvInputDef = indicator.inputs[mapping.tvInputId]; if (!tvInputDef) { warn(`   ⚠️  Input ${key} not in indicator`); continue; } const typed = _coerce(value, mapping.type); indicator.setOption(mapping.tvInputId, typed); info(`   ✅ ${key} → ${mapping.tvInputId}: ${JSON.stringify(typed)} (${tvInputDef.type})`); } catch (e) { warn(`   ⚠️  ${key} failed: ${e.message}`); }
   }
 }
 
@@ -230,7 +234,7 @@ async function runWebSocket(symbol, tf, bars, startTime, inputs) {
       try { client.end(); } catch {}
       return parsed;
     } catch (err) {
-      if (/maximum number of studies/i.test(err.message) && attempt < 3) { console.log(`⚠️ Retry ${attempt}/3...`); try { chart.delete(); } catch {} try { client.end(); } catch {} await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
+      if (/maximum number of studies/i.test(err.message) && attempt < 3) { info(`⚠️ Retry ${attempt}/3...`); try { chart.delete(); } catch {} try { client.end(); } catch {} await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
       throw err;
     } finally { try { study.remove(); } catch {} try { chart.delete(); } catch {} try { client.end(); } catch {} }
   }
@@ -238,14 +242,20 @@ async function runWebSocket(symbol, tf, bars, startTime, inputs) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  STRICT_JSON_STDOUT = args.json === true;
   if (args.help || (!args._symbol && process.argv.length <= 2)) { printUsage(); process.exit(0); }
   const startTime = Date.now();
-  console.log(`\n📊 Running: ${PINE_ID} | ${args.symbol} | ${args.tf} | ${args.bars} bars`);
-  if (args.dryRun) { console.log('\n🏜️ DRY RUN'); console.log(JSON.stringify({ status: 'dry_run', ...args, timestamp: new Date().toISOString() }, null, 2)); process.exit(EXIT_CODES.SUCCESS); }
+  info(`\n📊 Running: ${PINE_ID} | ${args.symbol} | ${args.tf} | ${args.bars} bars`);
+  if (args.dryRun) {
+    const dry = JSON.stringify({ status: 'dry_run', ...args, timestamp: new Date().toISOString() }, null, 2);
+    if (args.json) console.log(dry);
+    else { info('\n🏜️ DRY RUN'); info(dry); }
+    process.exit(EXIT_CODES.SUCCESS);
+  }
   try {
     const result = await runWebSocket(args.symbol, args.tf, args.bars, startTime, args.inputs);
-    if (args.verbose) console.log(`\n✓ Completed in ${result.meta.durationMs}ms`);
-    if (args.json) { const output = args.agent ? transformForAgentMode(result, args) : result; const json = JSON.stringify(output, null, 2); if (args.out) { fs.writeFileSync(args.out, json); console.log(`✅ Saved to ${args.out}`); } else console.log(json); }
+    if (args.verbose) info(`\n✓ Completed in ${result.meta.durationMs}ms`);
+    if (args.json) { const output = args.agent ? transformForAgentMode(result, args) : result; const json = JSON.stringify(output, null, 2); if (args.out) { fs.writeFileSync(args.out, json); info(`✅ Saved to ${args.out}`); } else console.log(json); }
     else printResults(result);
     process.exit(EXIT_CODES.SUCCESS);
   } catch (err) { const isCritical = /SESSION|SIGNATURE|connection/i.test(err.message); console.error(`\n❌ Error: ${err.message}`); process.exit(isCritical ? EXIT_CODES.CRITICAL : EXIT_CODES.VALIDATION); }

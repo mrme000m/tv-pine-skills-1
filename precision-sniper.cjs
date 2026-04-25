@@ -17,7 +17,7 @@ const fs = require('fs');
 const path = require('path');
 
 const SCRIPT_DIR = path.dirname(__filename);
-require('dotenv').config({ path: path.join(SCRIPT_DIR, '.env') });
+require('dotenv').config({ path: path.join(SCRIPT_DIR, '.env'), quiet: true });
 
 const tv = require('./tv-optimized.cjs');
 
@@ -41,6 +41,10 @@ const PRESET_DEFAULT = {
 };
 
 const EXIT_CODES = { SUCCESS: 0, CRITICAL: 1, NO_DATA: 2, TIMEOUT: 3, VALIDATION: 4 };
+
+let STRICT_JSON_STDOUT = false;
+function info(...args) { if (!STRICT_JSON_STDOUT) console.log(...args); }
+function warn(...args) { if (!STRICT_JSON_STDOUT) console.warn(...args); }
 
 function exitWithError(code, message) {
   console.error(`\n❌ Error ${code}: ${message}`);
@@ -163,18 +167,18 @@ const INPUT_MAP = [
 
 function applyInputs(indicator, inputs) {
   if (!inputs || Object.keys(inputs).length === 0) return;
-  console.log(`📝 Applying input overrides...`);
+  info(`📝 Applying input overrides...`);
   for (const [key, value] of Object.entries(inputs)) {
     const mapping = INPUT_MAP.find(m => m.variable === key);
-    if (!mapping) { console.warn(`   ⚠️  Unknown input: ${key}`); continue; }
+    if (!mapping) { warn(`   ⚠️  Unknown input: ${key}`); continue; }
     try {
       const tvInputDef = indicator.inputs[mapping.tvInputId];
-      if (!tvInputDef) { console.warn(`   ⚠️  Input ${key} not in indicator`); continue; }
+      if (!tvInputDef) { warn(`   ⚠️  Input ${key} not in indicator`); continue; }
       const typed = _coerce(value, mapping.type);
       indicator.setOption(mapping.tvInputId, typed);
-      console.log(`   ✅ ${key} → ${mapping.tvInputId}: ${JSON.stringify(value)} → ${JSON.stringify(typed)} (${tvInputDef.type})`);
+      info(`   ✅ ${key} → ${mapping.tvInputId}: ${JSON.stringify(value)} → ${JSON.stringify(typed)} (${tvInputDef.type})`);
     } catch (e) {
-      console.warn(`   ⚠️  ${key} failed: ${e.message}`);
+      warn(`   ⚠️  ${key} failed: ${e.message}`);
     }
   }
 }
@@ -659,7 +663,7 @@ async function runWebSocket(symbol, tf, bars, inputs, startTime) {
       try {
         const existing = chart.getStudies ? chart.getStudies() : [];
         if (existing.length > 0) {
-          console.log(`🧹 Removing ${existing.length} existing study/studies...`);
+          info(`🧹 Removing ${existing.length} existing study/studies...`);
           if (chart.removeAllStudies) {
             await chart.removeAllStudies();
           } else {
@@ -703,7 +707,7 @@ async function runWebSocket(symbol, tf, bars, inputs, startTime) {
     } catch (err) {
       const isLimit = /maximum number of studies/i.test(err.message);
       if (isLimit && attempt < 3) {
-        console.log(`⚠️  Study limit hit (attempt ${attempt}/3), retrying in ${attempt * 3}s...`);
+        info(`⚠️  Study limit hit (attempt ${attempt}/3), retrying in ${attempt * 3}s...`);
         try { chart.delete(); } catch {}
         try { client.end(); } catch {}
         await new Promise(r => setTimeout(r, attempt * 3000));
@@ -721,6 +725,7 @@ async function runWebSocket(symbol, tf, bars, inputs, startTime) {
 // ── main ──────────────────────────────────────────────────────────
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  STRICT_JSON_STDOUT = args.json === true;
 
   if (args.help || (!args._symbol && process.argv.length <= 2)) {
     printUsage();
@@ -728,29 +733,33 @@ async function main() {
   }
 
   const startTime = Date.now();
-  console.log('\n======================================================================');
-  console.log(`📊 Running: ${PINE_ID}`);
-  console.log(`   Symbol: ${args.symbol} | Timeframe: ${args.tf} | Bars: ${args.bars}`);
-  console.log('======================================================================');
+  info('\n======================================================================');
+  info(`📊 Running: ${PINE_ID}`);
+  info(`   Symbol: ${args.symbol} | Timeframe: ${args.tf} | Bars: ${args.bars}`);
+  info('======================================================================');
 
   const inputs = loadPreset(args.preset);
   args.inputs = inputs;
-  console.log(`📝 Input overrides (${args.preset} preset):`);
-  console.log(JSON.stringify(inputs, null, 2));
+  info(`📝 Input overrides (${args.preset} preset):`);
+  info(JSON.stringify(inputs, null, 2));
 
   if (args.dryRun) {
-    console.log('\n🏜️  DRY RUN — Skipping TradingView connection.');
-    console.log(JSON.stringify({ status: 'dry_run', symbol: args.symbol, timeframe: args.tf, bars: args.bars, inputs, timestamp: new Date().toISOString() }, null, 2));
+    const dry = JSON.stringify({ status: 'dry_run', symbol: args.symbol, timeframe: args.tf, bars: args.bars, inputs, timestamp: new Date().toISOString() }, null, 2);
+    if (args.json) console.log(dry);
+    else {
+      info('\n🏜️  DRY RUN — Skipping TradingView connection.');
+      info(dry);
+    }
     process.exit(EXIT_CODES.SUCCESS);
   }
 
   try {
     const result = await runWebSocket(args.symbol, args.tf, args.bars, inputs, startTime);
-    if (args.verbose) console.log(`\n✓ Completed in ${result.meta.durationMs}ms`);
+    if (args.verbose) info(`\n✓ Completed in ${result.meta.durationMs}ms`);
     if (args.json) {
       const output = args.agent ? transformForAgentMode(result, args) : result;
       const json = JSON.stringify(output, null, 2);
-      if (args.out) { fs.writeFileSync(args.out, json, 'utf8'); console.log(`✅ Saved JSON to ${args.out}`); }
+      if (args.out) { fs.writeFileSync(args.out, json, 'utf8'); info(`✅ Saved JSON to ${args.out}`); }
       else console.log(json);
     } else {
       printResults(result);

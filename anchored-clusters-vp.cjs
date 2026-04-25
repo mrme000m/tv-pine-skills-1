@@ -207,6 +207,11 @@ function transformForAgentMode(result, args) {
     opportunities: signals.map(s => ({ rank: s.rank, setup: s.setupType, direction: s.direction, confidence: s.confidence, confluenceScore: s.confluenceScore, distanceFromPrice: null, isStale: false, rationale: s.rationale })),
     narrative, conformance: { hasValidData: summary.totalClusters > 0, agenticScore: enhanced.agenticScore },
     schemaVersion: 'agent-ready-v2.0.0',
+    // Backward compatibility fields - ensure these are present for downstream parsers
+    summary,
+    currentBar: latestCluster || null,
+    recentBars: clusters,
+    signals,
   };
 }
 

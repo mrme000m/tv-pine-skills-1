@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const SCRIPT_DIR = path.dirname(__filename);
-require('dotenv').config({ path: path.join(SCRIPT_DIR, '.env') });
+require('dotenv').config({ path: path.join(SCRIPT_DIR, '.env'), quiet: true });
 const tv = require('./tv-optimized.cjs');
 
 const PINE_ID = 'PUB;bdd3bc54cf9f4dc6b42e6b2879b4eed2';
@@ -21,6 +21,10 @@ const INPUT_MAP = [
   { variable: 'length_momentum', tvInputId: 'in_1', type: 'int', default: 14 },
   { variable: 'lookback_sr', tvInputId: 'in_2', type: 'int', default: 7 }
 ];
+
+let STRICT_JSON_STDOUT = false;
+function info(...args) { if (!STRICT_JSON_STDOUT) console.log(...args); }
+function warn(...args) { if (!STRICT_JSON_STDOUT) console.warn(...args); }
 
 function parseArgs(argv) {
   const args = { _symbol: argv[0]?.toUpperCase() || null, symbol: 'BTCUSDT', tf: '15m', bars: 500, json: false, out: null, agent: false, verbose: false, dryRun: false, inputs: {} };
@@ -66,22 +70,17 @@ function _coerce(val, type) { const s = String(val); if (type === 'bool') return
 
 function applyInputs(indicator, inputs) {
   if (!inputs || Object.keys(inputs).length === 0) return;
-  console.log(`📝 Applying input overrides...`);
+  info(`📝 Applying input overrides...`);
   for (const [key, value] of Object.entries(inputs)) {
     const mapping = INPUT_MAP.find(m => m.variable === key);
-    if (!mapping) { console.warn(`   ⚠️  Unknown input: ${key}`); continue; }
-    try { const tvInputDef = indicator.inputs[mapping.tvInputId]; if (!tvInputDef) { console.warn(`   ⚠️  Input ${key} not in indicator`); continue; } const typed = _coerce(value, mapping.type); indicator.setOption(mapping.tvInputId, typed); console.log(`   ✅ ${key} → ${mapping.tvInputId}: ${JSON.stringify(typed)} (${tvInputDef.type})`); } catch (e) { console.warn(`   ⚠️  ${key} failed: ${e.message}`); }
+    if (!mapping) { warn(`   ⚠️  Unknown input: ${key}`); continue; }
+    try { const tvInputDef = indicator.inputs[mapping.tvInputId]; if (!tvInputDef) { warn(`   ⚠️  Input ${key} not in indicator`); continue; } const typed = _coerce(value, mapping.type); indicator.setOption(mapping.tvInputId, typed); info(`   ✅ ${key} → ${mapping.tvInputId}: ${JSON.stringify(typed)} (${tvInputDef.type})`); } catch (e) { warn(`   ⚠️  ${key} failed: ${e.message}`); }
   }
 }
 
 function _resolveTrend(code) {
-  // Delta Volume Intensity uses BackgroundColor codes for trend states
-  // The actual mapping depends on the Pine script implementation but is
-  // consistently: 0=UPTREND, 1=DOWNTREND, 2=NEUTRAL/SIDEWAYS (most common)
-  // Fallback: treat unknown codes by first digit proximity
   const n = typeof code === 'number' ? code : parseInt(code, 10);
   if (isNaN(n)) return 'sideways';
-  // Observed: 0,1,2 pattern from BackgroundColor colorer field
   if (n === 0) return 'uptrend';
   if (n === 1) return 'downtrend';
   return 'sideways';
@@ -98,13 +97,32 @@ function _resolveBackground(code) {
 function parseOutput(rawData, timeframe) {
   const periods = rawData?.periods || [];
   const ohlcv = rawData?.ohlcv || [];
+  
+  // Create a map from timestamp to OHLCV data
+  const ohlcvMap = new Map();
+  for (const o of ohlcv) {
+    const time = o.time ?? o.Time ?? o.timestamp ?? o.Timestamp;
+    if (time != null) {
+      ohlcvMap.set(String(time), o);
+    }
+  }
+  
   const bars = [];
 
   for (let i = 0; i < periods.length; i++) {
     const p = periods[i];
-    const o = ohlcv[i];
+    const timeValue = p.time ?? p.Time ?? p.timestamp ?? p.Timestamp;
+    const timeStr = String(timeValue);
+    const o = ohlcvMap.get(timeStr) || {};
+    
+    // Extract OHLCV - try multiple possible field names
+    const open = p.open ?? p.Open ?? o.open ?? o.Open ?? null;
+    const high = p.high ?? p.High ?? o.high ?? o.High ?? null;
+    const low = p.low ?? p.Low ?? o.low ?? o.Low ?? null;
+    const close = p.close ?? p.Close ?? o.close ?? o.Close ?? null;
+    
     const entry = {
-      time: p.time, barIndex: p.index,
+      time: timeValue, barIndex: p.index,
       support: p.support ?? p.Support ?? null,
       resistance: p.resistance ?? p.Resistance ?? null,
       atr: p.atr ?? p.ATR ?? p.VolatilityATR ?? p.volatilityATR ?? null,
@@ -114,12 +132,15 @@ function parseOutput(rawData, timeframe) {
       uptrendAlert: p.uptrendAlert ?? p.UptrendAlert ?? p['Uptrend Alert'] ?? null,
       downtrendAlert: p.downtrendAlert ?? p.DowntrendAlert ?? p['Downtrend Alert'] ?? null,
       sidewaysAlert: p.sidewaysAlert ?? p.SidewaysAlert ?? p['Sideways Alert'] ?? null,
-      open: o?.open ?? p.open, high: o?.high ?? p.high, low: o?.low ?? p.low, close: o?.close ?? p.close,
+      open,
+      high,
+      low,
+      close,
     };
     bars.push(entry);
   }
 
-  // Trend state analysis — resolve numeric background color codes to semantic states
+  // Trend state analysis
   const lastBars = bars.slice(-20);
   const resolvedTrends = lastBars.map(b => _resolveTrend(b.trend));
   const resolvedBg = lastBars.map(b => _resolveBackground(b.backgroundTrend));
@@ -128,7 +149,6 @@ function parseOutput(rawData, timeframe) {
   const sidewaysBars = resolvedTrends.filter(t => t === 'sideways').length;
   const trendConsensus = uptrendBars > downtrendBars * 1.5 ? 'UPTREND' : downtrendBars > uptrendBars * 1.5 ? 'DOWNTREND' : 'SIDEWAYS';
 
-  // Background trend consistency
   const bgTrends = resolvedBg.filter(Boolean);
   const bgConsensus = bgTrends.length > 0 ? _mode(bgTrends) : 'unknown';
 
@@ -155,7 +175,15 @@ function parseOutput(rawData, timeframe) {
   // Alert triggers
   const alerts = bars.filter(b => b.uptrendAlert || b.downtrendAlert || b.sidewaysAlert).slice(-5);
 
-  const summary = { totalBars: bars.length, uptrendBars, downtrendBars, sidewaysBars, trendConsensus, bgConsensus, srBreaks: srBreaks.length, recentBreaks: recentBreaks.length, avgATR: _round(avgATR), latestATR: _round(latestATR), volatilityRegime, latestROC: _round(latestROC), momentum, alerts: alerts.length };
+  const lastPrice = bars.length > 0 ? (bars[bars.length - 1].close ?? bars[bars.length - 1].open) : null;
+  
+  const summary = { 
+    totalBars: bars.length, uptrendBars, downtrendBars, sidewaysBars, 
+    trendConsensus, bgConsensus, srBreaks: srBreaks.length, recentBreaks: recentBreaks.length, 
+    avgATR: _round(avgATR), latestATR: _round(latestATR), volatilityRegime, 
+    latestROC: _round(latestROC), momentum, alerts: alerts.length,
+    lastPrice
+  };
 
   const signals = _generateSignals(trendConsensus, momentum, volatilityRegime, recentBreaks, latestATR, avgATR);
   const narrative = _generateNarrative(summary, signals);
@@ -207,20 +235,90 @@ function _computeAgenticScore(totalBars, srBreaks, alerts) {
 }
 
 function transformForAgentMode(result, args) {
-  const { summary, bars, recentBreaks, alerts, signals, narrative, meta, enhanced } = result;
+  const { summary, bars, recentBreaks, alerts, signals, narrative, meta } = result;
+  const now = new Date().toISOString();
+
   return {
-    status: 'ok', exitCode: EXIT_CODES.SUCCESS, timestamp: new Date().toISOString(),
-    execution: { durationMs: meta.durationMs, attempts: 1 },
-    agentContext: { workflow: 'delta-volume-intensity', modelVersion: 'agent-ready-v2', symbol: args?.symbol || 'unknown', timeframe: meta.timeframe, htfTimeframe: null },
-    trend: { consensus: summary.trendConsensus, uptrendBars: summary.uptrendBars, downtrendBars: summary.downtrendBars, sidewaysBars: summary.sidewaysBars, bgConsensus: summary.bgConsensus },
-    volatility: { regime: summary.volatilityRegime, latestATR: summary.latestATR, avgATR: summary.avgATR },
-    momentum: { roc: summary.latestROC, state: summary.momentum },
-    sr: { totalBreaks: summary.srBreaks, recentBreaks: recentBreaks.map(b => ({ time: b.time, type: b.type, price: b.price, level: b.level })) },
-    alerts: alerts.map(a => ({ time: a.time, uptrend: a.uptrendAlert, downtrend: a.downtrendAlert, sideways: a.sidewaysAlert })),
-    latestBars: bars.slice(-5).map(b => ({ time: b.time, close: b.close, trend: b.trend, support: b.support, resistance: b.resistance, atr: b.atr, roc: b.roc })),
-    opportunities: signals.map(s => ({ rank: s.rank, setup: s.setupType, direction: s.direction, confidence: s.confidence, confluenceScore: s.confluenceScore, distanceFromPrice: null, isStale: false, rationale: s.rationale })),
-    narrative, conformance: { hasValidData: summary.totalBars > 0, agenticScore: enhanced.agenticScore },
+    status: 'ok',
+    exitCode: EXIT_CODES.SUCCESS,
+    timestamp: now,
+    execution: {
+      durationMs: meta.durationMs,
+      attempts: 1,
+    },
+    agentContext: {
+      workflow: 'trend-following-sr-break',
+      modelVersion: 'agent-ready-v2',
+      symbol: args?.symbol || meta.symbol || 'unknown',
+      timeframe: meta.timeframe || '15m',
+    },
+    market: {
+      lastPrice: summary.lastPrice,
+      bias: summary.trendConsensus,
+      dominantFlow: summary.momentum,
+      regime: summary.volatilityRegime,
+    },
+    structure: {
+      trend: {
+        consensus: summary.trendConsensus,
+        uptrendBars: summary.uptrendBars,
+        downtrendBars: summary.downtrendBars,
+        sidewaysBars: summary.sidewaysBars,
+        backgroundConsensus: summary.bgConsensus,
+      },
+      volatility: {
+        regime: summary.volatilityRegime,
+        latestATR: summary.latestATR,
+        avgATR: summary.avgATR,
+      },
+      momentum: {
+        latestROC: summary.latestROC,
+        state: summary.momentum,
+      },
+      srBreaks: {
+        total: summary.srBreaks,
+        recent: summary.recentBreaks,
+        lastBreaks: recentBreaks.map(b => ({
+          time: b.time,
+          type: b.type,
+          price: b.price,
+          level: b.level,
+        })),
+      },
+    },
+    signals: signals.map(s => ({
+      rank: s.rank,
+      setupType: s.setupType,
+      direction: s.direction,
+      confidence: s.confidence,
+      confluenceScore: s.confluenceScore,
+      rationale: s.rationale,
+    })),
+    narrative: {
+      marketStructure: narrative.marketStructure,
+      primaryOpportunity: narrative.primaryOpportunity,
+      warnings: narrative.warnings,
+      watchlist: narrative.watchlist,
+    },
+    validation: {
+      checks: [
+        { name: 'valid_bars', passed: summary.totalBars > 0, message: `Total bars: ${summary.totalBars}` },
+        { name: 'valid_trend', passed: summary.trendConsensus !== 'SIDEWAYS', message: `Trend: ${summary.trendConsensus}` },
+        { name: 'valid_momentum', passed: summary.momentum !== 'NEUTRAL', message: `Momentum: ${summary.momentum}` },
+        { name: 'sr_breaks', passed: summary.srBreaks > 0, message: `S/R breaks: ${summary.srBreaks}` },
+      ],
+    },
+    conformance: {
+      hasValidStructure: summary.totalBars > 0,
+      hasDirectionalImpulse: summary.momentum !== 'NEUTRAL',
+      agenticScore: result.enhanced?.agenticScore || 0.5,
+    },
     schemaVersion: 'agent-ready-v2.0.0',
+    // Backward compatibility fields
+    summary,
+    currentBar: bars.length > 0 ? bars[bars.length - 1] : null,
+    recentBars: bars,
+    signals,
   };
 }
 
@@ -276,7 +374,7 @@ async function runWebSocket(symbol, tf, bars, startTime, inputs) {
       try { client.end(); } catch {}
       return parsed;
     } catch (err) {
-      if (/maximum number of studies/i.test(err.message) && attempt < 3) { console.log(`⚠️ Retry ${attempt}/3...`); try { chart.delete(); } catch {} try { client.end(); } catch {} await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
+      if (/maximum number of studies/i.test(err.message) && attempt < 3) { info(`⚠️ Retry ${attempt}/3...`); try { chart.delete(); } catch {} try { client.end(); } catch {} await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
       throw err;
     } finally { try { study.remove(); } catch {} try { chart.delete(); } catch {} try { client.end(); } catch {} }
   }
@@ -284,14 +382,20 @@ async function runWebSocket(symbol, tf, bars, startTime, inputs) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  STRICT_JSON_STDOUT = args.json === true;
   if (args.help || (!args._symbol && process.argv.length <= 2)) { printUsage(); process.exit(0); }
   const startTime = Date.now();
-  console.log(`\n📊 Running: ${PINE_ID} | ${args.symbol} | ${args.tf} | ${args.bars} bars`);
-  if (args.dryRun) { console.log('\n🏜️ DRY RUN'); console.log(JSON.stringify({ status: 'dry_run', ...args, timestamp: new Date().toISOString() }, null, 2)); process.exit(EXIT_CODES.SUCCESS); }
+  info(`\n📊 Running: ${PINE_ID} | ${args.symbol} | ${args.tf} | ${args.bars} bars`);
+  if (args.dryRun) {
+    const dry = JSON.stringify({ status: 'dry_run', ...args, timestamp: new Date().toISOString() }, null, 2);
+    if (args.json) console.log(dry);
+    else { info('\n🏜️ DRY RUN'); info(dry); }
+    process.exit(EXIT_CODES.SUCCESS);
+  }
   try {
     const result = await runWebSocket(args.symbol, args.tf, args.bars, startTime, args.inputs);
-    if (args.verbose) console.log(`\n✓ Completed in ${result.meta.durationMs}ms`);
-    if (args.json) { const output = args.agent ? transformForAgentMode(result, args) : result; const json = JSON.stringify(output, null, 2); if (args.out) { fs.writeFileSync(args.out, json); console.log(`✅ Saved to ${args.out}`); } else console.log(json); }
+    if (args.verbose) info(`\n✓ Completed in ${result.meta.durationMs}ms`);
+    if (args.json) { const output = args.agent ? transformForAgentMode(result, args) : result; const json = JSON.stringify(output, null, 2); if (args.out) { fs.writeFileSync(args.out, json); info(`✅ Saved to ${args.out}`); } else console.log(json); }
     else printResults(result);
     process.exit(EXIT_CODES.SUCCESS);
   } catch (err) { const isCritical = /SESSION|SIGNATURE|connection/i.test(err.message); console.error(`\n❌ Error: ${err.message}`); process.exit(isCritical ? EXIT_CODES.CRITICAL : EXIT_CODES.VALIDATION); }
