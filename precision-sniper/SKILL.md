@@ -1,12 +1,11 @@
 ---
 name: precision-sniper
 description: |
-  Use the Precision Sniper TradingView indicator to analyze any symbol/timeframe and extract grade-based confluence signals. This skill triggers when the user wants to: get high-probability entry signals, analyze EMA confluence, filter trades by grade quality, or use HTF bias alignment for directional confirmation. Also triggers when the user runs `precision-sniper.cjs` or mentions terms like "Precision Sniper", "grade signals", "EMA confluence", "A+ signal", "sniper entries", or "confluence score".
+  Use the Precision Sniper TradingView indicator to analyze any symbol/timeframe and extract grade-based confluence signals.
 version: 1.0.0
-compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
 metadata:
   hermes:
-    tags: [trading, tradingview, pine-script, technical-analysis]
+    tags: [trading, tradingview, pine-script, ema, rsi, confluence, graded-signals]
     category: trading
 ---
 
@@ -199,6 +198,16 @@ From the output, answer:
 
 **Example story:**
 > "Precision Sniper shows BULLISH trend with BULLISH HTF bias — fully aligned. Latest signal: Long A+ at 77420. Confluence score 9/10. ADX 28.2 ✓. Entry 77420, SL 77100 (ATR×1.5), TP1 77740, TP2 78060. EMAs: Fast 77380, Slow 77200, Trend 76800 — strong upward stack."
+
+
+## Verification
+
+To confirm this skill executed correctly:
+
+1. Run `node precision-sniper.cjs BTCUSDT --agent`
+2. Confirm the JSON output contains a `status: "ok"` field
+3. Verify the output includes indicator-specific data (see schema sections above)
+4. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 

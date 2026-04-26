@@ -20,6 +20,7 @@ const SCRIPT_DIR = path.dirname(__filename);
 require('dotenv').config({ path: path.join(SCRIPT_DIR, '.env'), quiet: true });
 
 const tv = require('./tv-optimized.cjs');
+const { AgentOutput, enableSilentMode, isSilent } = require('./agent-output.cjs');
 
 const PINE_ID = 'PUB;1fc29950178c42a1a88f52a18161dd53';
 const SCRIPT_NAME = 'Precision Sniper';
@@ -42,9 +43,6 @@ const PRESET_DEFAULT = {
 
 const EXIT_CODES = { SUCCESS: 0, CRITICAL: 1, NO_DATA: 2, TIMEOUT: 3, VALIDATION: 4 };
 
-let STRICT_JSON_STDOUT = false;
-function info(...args) { if (!STRICT_JSON_STDOUT) console.log(...args); }
-function warn(...args) { if (!STRICT_JSON_STDOUT) console.warn(...args); }
 
 function exitWithError(code, message) {
   console.error(`\n❌ Error ${code}: ${message}`);
@@ -63,6 +61,7 @@ function parseArgs(argv) {
     agent: false,
     verbose: false,
     dryRun: false,
+    silent: false,
   };
   let start = 0;
   if (args._symbol && !args._symbol.startsWith('-')) {
@@ -80,6 +79,7 @@ function parseArgs(argv) {
     else if (a === '--agent') { args.json = true; args.agent = true; }
     else if (a === '--verbose' || a === '-v') { args.verbose = true; }
     else if (a === '--dry-run') { args.dryRun = true; }
+    else if (a === '--silent') { args.silent = true; }
     else if (a === '--help' || a === '-h') { args.help = true; }
   }
   return args;
@@ -167,18 +167,18 @@ const INPUT_MAP = [
 
 function applyInputs(indicator, inputs) {
   if (!inputs || Object.keys(inputs).length === 0) return;
-  info(`📝 Applying input overrides...`);
+  AgentOutput.info(`📝 Applying input overrides...`);
   for (const [key, value] of Object.entries(inputs)) {
     const mapping = INPUT_MAP.find(m => m.variable === key);
-    if (!mapping) { warn(`   ⚠️  Unknown input: ${key}`); continue; }
+    if (!mapping) { AgentOutput.warn(`   ⚠️  Unknown input: ${key}`); continue; }
     try {
       const tvInputDef = indicator.inputs[mapping.tvInputId];
-      if (!tvInputDef) { warn(`   ⚠️  Input ${key} not in indicator`); continue; }
+      if (!tvInputDef) { AgentOutput.warn(`   ⚠️  Input ${key} not in indicator`); continue; }
       const typed = _coerce(value, mapping.type);
       indicator.setOption(mapping.tvInputId, typed);
-      info(`   ✅ ${key} → ${mapping.tvInputId}: ${JSON.stringify(value)} → ${JSON.stringify(typed)} (${tvInputDef.type})`);
+      AgentOutput.info(`   ✅ ${key} → ${mapping.tvInputId}: ${JSON.stringify(value)} → ${JSON.stringify(typed)} (${tvInputDef.type})`);
     } catch (e) {
-      warn(`   ⚠️  ${key} failed: ${e.message}`);
+      AgentOutput.warn(`   ⚠️  ${key} failed: ${e.message}`);
     }
   }
 }
@@ -574,6 +574,12 @@ function transformForAgentMode(result, args) {
       agenticScore: enhanced.agenticScore,
     },
     schemaVersion: 'agent-ready-v2.0.0',
+    _parserMeta: {
+      schemaVersion: 'agent-ready-v2.1.0',
+      emittedAt: new Date().toISOString(),
+      deterministic: true,
+      workflow: 'ema-confluence-sniper',
+    },
   };
 }
 
@@ -663,7 +669,7 @@ async function runWebSocket(symbol, tf, bars, inputs, startTime) {
       try {
         const existing = chart.getStudies ? chart.getStudies() : [];
         if (existing.length > 0) {
-          info(`🧹 Removing ${existing.length} existing study/studies...`);
+          AgentOutput.info(`🧹 Removing ${existing.length} existing study/studies...`);
           if (chart.removeAllStudies) {
             await chart.removeAllStudies();
           } else {
@@ -707,7 +713,7 @@ async function runWebSocket(symbol, tf, bars, inputs, startTime) {
     } catch (err) {
       const isLimit = /maximum number of studies/i.test(err.message);
       if (isLimit && attempt < 3) {
-        info(`⚠️  Study limit hit (attempt ${attempt}/3), retrying in ${attempt * 3}s...`);
+        AgentOutput.info(`⚠️  Study limit hit (attempt ${attempt}/3), retrying in ${attempt * 3}s...`);
         try { chart.delete(); } catch {}
         try { client.end(); } catch {}
         await new Promise(r => setTimeout(r, attempt * 3000));
@@ -725,7 +731,7 @@ async function runWebSocket(symbol, tf, bars, inputs, startTime) {
 // ── main ──────────────────────────────────────────────────────────
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  STRICT_JSON_STDOUT = args.json === true;
+  if (args.silent || args.agent) enableSilentMode(true);
 
   if (args.help || (!args._symbol && process.argv.length <= 2)) {
     printUsage();
@@ -733,34 +739,32 @@ async function main() {
   }
 
   const startTime = Date.now();
-  info('\n======================================================================');
-  info(`📊 Running: ${PINE_ID}`);
-  info(`   Symbol: ${args.symbol} | Timeframe: ${args.tf} | Bars: ${args.bars}`);
-  info('======================================================================');
+  AgentOutput.info('\n======================================================================');
+  AgentOutput.info(`📊 Running: ${PINE_ID}`);
+  AgentOutput.info(`   Symbol: ${args.symbol} | Timeframe: ${args.tf} | Bars: ${args.bars}`);
+  AgentOutput.info('======================================================================');
 
   const inputs = loadPreset(args.preset);
   args.inputs = inputs;
-  info(`📝 Input overrides (${args.preset} preset):`);
-  info(JSON.stringify(inputs, null, 2));
+  AgentOutput.info(`📝 Input overrides (${args.preset} preset):`);
+  AgentOutput.info(JSON.stringify(inputs, null, 2));
 
   if (args.dryRun) {
     const dry = JSON.stringify({ status: 'dry_run', symbol: args.symbol, timeframe: args.tf, bars: args.bars, inputs, timestamp: new Date().toISOString() }, null, 2);
     if (args.json) console.log(dry);
     else {
-      info('\n🏜️  DRY RUN — Skipping TradingView connection.');
-      info(dry);
+      AgentOutput.info('\n🏜️  DRY RUN — Skipping TradingView connection.');
+      AgentOutput.info(dry);
     }
     process.exit(EXIT_CODES.SUCCESS);
   }
 
   try {
     const result = await runWebSocket(args.symbol, args.tf, args.bars, inputs, startTime);
-    if (args.verbose) info(`\n✓ Completed in ${result.meta.durationMs}ms`);
-    if (args.json) {
+    if (args.verbose) AgentOutput.info(`\n✓ Completed in ${result.meta.durationMs}ms`);
+    if (args.json || args.agent) {
       const output = args.agent ? transformForAgentMode(result, args) : result;
-      const json = JSON.stringify(output, null, 2);
-      if (args.out) { fs.writeFileSync(args.out, json, 'utf8'); info(`✅ Saved JSON to ${args.out}`); }
-      else console.log(json);
+      AgentOutput.emit(output, { outPath: args.out, pretty: !isSilent() });
     } else {
       printResults(result);
     }

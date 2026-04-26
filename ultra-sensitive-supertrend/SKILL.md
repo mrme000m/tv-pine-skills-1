@@ -1,12 +1,11 @@
 ---
 name: ultra-sensitive-supertrend
 description: |
-  Use the Ultra Sensitive SuperTrend TradingView indicator to analyze dual SuperTrend alignment, detect ultra buy/sell signals, and identify high-confidence trend entries based on double confirmation. This skill triggers when the user wants to: analyze dual supertrend alignment, detect ultra signals, find supertrend confluence, trade double confirmation setups, or identify early trend changes. Also triggers when the user runs `ultra-sensitive-supertrend.cjs` or mentions terms like "ultra supertrend", "dual supertrend", "super trend", "ultra buy", "ultra sell", "ST alignment", or "trend confirmation".
+  Use the Ultra Sensitive SuperTrend TradingView indicator to analyze dual SuperTrend alignment, detect ultra buy/sell signals, and identify high-confidence trend entries based on double confirmation.
 version: 1.0.0
-compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
 metadata:
   hermes:
-    tags: [trading, tradingview, pine-script, technical-analysis]
+    tags: [trading, tradingview, pine-script, supertrend, dual]
     category: trading
 ---
 
@@ -163,6 +162,16 @@ node ultra-sensitive-supertrend.cjs <SYMBOL> --tf <tf> --bars <bars>
 
 **Example story (bullish):**
 > "Ultra Sensitive ST: BULLISH, aligned. ST1=67150 (bull), ST2=67080 (bull), Background=BULLISH. Signals: Buy=8, UltraBuy=3. Current UltraBuy active. Last UltraBuy 2 bars ago. Strong long — entry on current signal, SL below ST2 at 67000, targeting 67800."
+
+
+## Verification
+
+To confirm this skill executed correctly:
+
+1. Run `node ultra-sensitive-supertrend.cjs BTCUSDT --agent`
+2. Confirm the JSON output contains a `status: "ok"` field
+3. Verify the output includes indicator-specific data (see schema sections above)
+4. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 

@@ -23,6 +23,7 @@ const SCRIPT_DIR = path.dirname(__filename);
 require('dotenv').config({ path: path.join(SCRIPT_DIR, '.env') });
 
 const tv = require('./tv-optimized.cjs');
+const { AgentOutput, enableSilentMode, isSilent } = require('./agent-output.cjs');
 
 // ── constants ─────────────────────────────────────────────────────
 const PINE_ID = 'PUB;0f80bcf05d544d4c98fde06faab1c976';
@@ -47,12 +48,12 @@ const EXIT_CODES = {
 };
 
 function exitWithError(code, message) {
-  console.error(`\n❌ Error ${code}: ${message}`);
+  AgentOutput.error(`\n❌ Error ${code}: ${message}`);
   process.exit(code);
 }
 
 function exitWithStatus(status, message) {
-  if (message) console.error(`\n${message}`);
+  if (message) AgentOutput.error(`\n${message}`);
   process.exit(status);
 }
 
@@ -69,6 +70,7 @@ function parseArgs(argv) {
     agent: false,
     verbose: false,
     dryRun: false,
+    silent: false,
   };
 
   let start = 0;
@@ -88,6 +90,7 @@ function parseArgs(argv) {
     else if (a === '--agent') { args.json = true; args.agent = true; }
     else if (a === '--verbose' || a === '-v') { args.verbose = true; }
     else if (a === '--dry-run') { args.dryRun = true; }
+    else if (a === '--silent') { args.silent = true; }
     else if (a === '--help' || a === '-h') { args.help = true; }
   }
 
@@ -113,6 +116,7 @@ Options:
   --agent                   Agent mode (simplified JSON, optimized for AI agents)
   --out <file>              Write JSON to file
   --verbose, -v             Verbose output for debugging
+  --silent                  Suppress all non-JSON stdout (use with --json or --agent)
   --dry-run                 Skip TradingView connection, show parsed args only
   --help, -h                Show this help
 
@@ -768,84 +772,90 @@ function transformForAgentMode(result, args) {
       agenticScore: enhanced.agenticScore,
     },
     schemaVersion: 'agent-ready-v2.0.0',
+    _parserMeta: {
+      schemaVersion: 'agent-ready-v2.1.0',
+      emittedAt: new Date().toISOString(),
+      deterministic: true,
+      workflow: 'adaptive-supertrend-quality',
+    },
   };
 }
 
 // ── output formatting ─────────────────────────────────────────────
 function printResults(result) {
   const { dashboard, signals, trendState, lines, meta, enhanced, lastBar } = result;
-  console.log('\n══════════════════════════════════════════════════════════════════════');
-  console.log('  SELF-AWARE TREND SYSTEM — ANALYSIS RESULTS');
-  console.log('══════════════════════════════════════════════════════════════════════');
+  AgentOutput.info('\n══════════════════════════════════════════════════════════════════════');
+  AgentOutput.info('  SELF-AWARE TREND SYSTEM — ANALYSIS RESULTS');
+  AgentOutput.info('══════════════════════════════════════════════════════════════════════');
 
-  console.log('\n📊 MARKET STATE');
-  console.log(`   Trend:      ${trendState.direction?.toUpperCase() || 'UNKNOWN'}`);
-  console.log(`   Quality:    ${trendState.quality} (TQI ${trendState.tqi ?? 'N/A'})`);
-  console.log(`   Regime:     ${trendState.regime}`);
-  console.log(`   Signal:     ${trendState.signal}`);
-  if (lastBar?.close) console.log(`   Last Price: ${lastBar.close.toFixed(2)}`);
-  if (trendState.superTrendPrice) console.log(`   SuperTrend: ${trendState.superTrendPrice.toFixed(2)}`);
+  AgentOutput.info('\n📊 MARKET STATE');
+  AgentOutput.info(`   Trend:      ${trendState.direction?.toUpperCase() || 'UNKNOWN'}`);
+  AgentOutput.info(`   Quality:    ${trendState.quality} (TQI ${trendState.tqi ?? 'N/A'})`);
+  AgentOutput.info(`   Regime:     ${trendState.regime}`);
+  AgentOutput.info(`   Signal:     ${trendState.signal}`);
+  if (lastBar?.close) AgentOutput.info(`   Last Price: ${lastBar.close.toFixed(2)}`);
+  if (trendState.superTrendPrice) AgentOutput.info(`   SuperTrend: ${trendState.superTrendPrice.toFixed(2)}`);
 
-  console.log('\n📈 TQI BREAKDOWN');
+  AgentOutput.info('\n📈 TQI BREAKDOWN');
   if (enhanced.tqiBreakdown.hasData) {
     Object.entries(enhanced.tqiBreakdown.components).forEach(([k, v]) => {
-      console.log(`   ${k}: ${v}`);
+      AgentOutput.info(`   ${k}: ${v}`);
     });
-    console.log(`   Average: ${enhanced.tqiBreakdown.average?.toFixed(3) ?? 'N/A'}`);
+    AgentOutput.info(`   Average: ${enhanced.tqiBreakdown.average?.toFixed(3) ?? 'N/A'}`);
   } else {
-    console.log('   No TQI breakdown available.');
+    AgentOutput.info('   No TQI breakdown available.');
   }
 
-  console.log('\n⚡ SIGNALS');
+  AgentOutput.info('\n⚡ SIGNALS');
   if (signals.latestTrade) {
     const t = signals.latestTrade;
-    console.log(`   Latest: ${t.direction} ${t.score}/30`);
-    if (t.tqi) console.log(`   TQI: ${t.tqi} | ER: ${t.er} | RSI: ${t.rsi}`);
+    AgentOutput.info(`   Latest: ${t.direction} ${t.score}/30`);
+    if (t.tqi) AgentOutput.info(`   TQI: ${t.tqi} | ER: ${t.er} | RSI: ${t.rsi}`);
   } else {
-    console.log('   No active signals.');
+    AgentOutput.info('   No active signals.');
   }
 
-  console.log('\n🎯 TRADE PLAN');
+  AgentOutput.info('\n🎯 TRADE PLAN');
   if (enhanced.tradePlan.entry) {
-    console.log(`   Direction: ${enhanced.tradePlan.direction}`);
-    console.log(`   Entry:     ${enhanced.tradePlan.entry.toFixed(2)}`);
-    console.log(`   SL:        ${enhanced.tradePlan.sl?.toFixed(2) || 'N/A'}`);
-    console.log(`   TP1:       ${enhanced.tradePlan.tp1?.toFixed(2) || 'N/A'}`);
-    console.log(`   TP2:       ${enhanced.tradePlan.tp2?.toFixed(2) || 'N/A'}`);
-    console.log(`   TP3:       ${enhanced.tradePlan.tp3?.toFixed(2) || 'N/A'}`);
+    AgentOutput.info(`   Direction: ${enhanced.tradePlan.direction}`);
+    AgentOutput.info(`   Entry:     ${enhanced.tradePlan.entry.toFixed(2)}`);
+    AgentOutput.info(`   SL:        ${enhanced.tradePlan.sl?.toFixed(2) || 'N/A'}`);
+    AgentOutput.info(`   TP1:       ${enhanced.tradePlan.tp1?.toFixed(2) || 'N/A'}`);
+    AgentOutput.info(`   TP2:       ${enhanced.tradePlan.tp2?.toFixed(2) || 'N/A'}`);
+    AgentOutput.info(`   TP3:       ${enhanced.tradePlan.tp3?.toFixed(2) || 'N/A'}`);
   } else {
-    console.log('   No active trade plan.');
+    AgentOutput.info('   No active trade plan.');
   }
 
-  console.log('\n📊 PERFORMANCE');
+  AgentOutput.info('\n📊 PERFORMANCE');
   if (enhanced.performance.winRate !== undefined) {
-    console.log(`   Win Rate: ${(enhanced.performance.winRate * 100).toFixed(1)}%`);
-    console.log(`   Avg R:    ${enhanced.performance.avgR ?? 'N/A'}`);
-    console.log(`   Window DD: ${enhanced.performance.windowDrawdown ?? 'N/A'}`);
+    AgentOutput.info(`   Win Rate: ${(enhanced.performance.winRate * 100).toFixed(1)}%`);
+    AgentOutput.info(`   Avg R:    ${enhanced.performance.avgR ?? 'N/A'}`);
+    AgentOutput.info(`   Window DD: ${enhanced.performance.windowDrawdown ?? 'N/A'}`);
   } else {
-    console.log('   No performance data.');
+    AgentOutput.info('   No performance data.');
   }
 
   if (enhanced.signals.length > 0) {
-    console.log('\n🎯 GENERATED SIGNALS');
+    AgentOutput.info('\n🎯 GENERATED SIGNALS');
     enhanced.signals.forEach(s => {
       const emoji = s.direction === 'long' ? '🟢' : '🔴';
-      console.log(`   ${emoji} #${s.rank} ${s.direction.toUpperCase()} | Confidence: ${s.confidence} | R/R: ${s.riskReward}`);
-      console.log(`      Entry: ${s.optimalEntry} | SL: ${s.stopLoss}`);
-      console.log(`      ${s.rationale}`);
+      AgentOutput.info(`   ${emoji} #${s.rank} ${s.direction.toUpperCase()} | Confidence: ${s.confidence} | R/R: ${s.riskReward}`);
+      AgentOutput.info(`      Entry: ${s.optimalEntry} | SL: ${s.stopLoss}`);
+      AgentOutput.info(`      ${s.rationale}`);
     });
   }
 
   if (enhanced.narrative.warnings.length > 0) {
-    console.log('\n⚠️  WARNINGS');
-    enhanced.narrative.warnings.forEach(w => console.log(`   • ${w}`));
+    AgentOutput.info('\n⚠️  WARNINGS');
+    enhanced.narrative.warnings.forEach(w => AgentOutput.info(`   • ${w}`));
   }
 
-  console.log('\nℹ️  META');
-  console.log(`   pineId:      ${meta.pineId}`);
-  console.log(`   Duration:    ${meta.durationMs}ms`);
-  console.log(`   Agentic Score: ${enhanced.agenticScore}`);
-  console.log('══════════════════════════════════════════════════════════════════════\n');
+  AgentOutput.info('\nℹ️  META');
+  AgentOutput.info(`   pineId:      ${meta.pineId}`);
+  AgentOutput.info(`   Duration:    ${meta.durationMs}ms`);
+  AgentOutput.info(`   Agentic Score: ${enhanced.agenticScore}`);
+  AgentOutput.info('══════════════════════════════════════════════════════════════════════\n');
 }
 
 // ── WebSocket runner ──────────────────────────────────────────────
@@ -959,6 +969,7 @@ async function runWebSocket(symbol, tf, bars, inputs, startTime) {
 // ── main ──────────────────────────────────────────────────────────
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.silent || args.agent) enableSilentMode(true);
 
   if (args.help || (!args._symbol && process.argv.length <= 2)) {
     printUsage();
@@ -992,15 +1003,9 @@ async function main() {
       console.log(`\n✓ Completed in ${result.meta.durationMs}ms`);
     }
 
-    if (args.json) {
+    if (args.json || args.agent) {
       const output = args.agent ? transformForAgentMode(result, args) : result;
-      const json = JSON.stringify(output, null, 2);
-      if (args.out) {
-        fs.writeFileSync(args.out, json, 'utf8');
-        console.log(`✅ Saved ${args.agent ? 'agent-ready' : 'raw'} JSON to ${args.out}`);
-      } else {
-        console.log(json);
-      }
+      AgentOutput.emit(output, { outPath: args.out, pretty: !isSilent() });
     } else {
       printResults(result);
     }

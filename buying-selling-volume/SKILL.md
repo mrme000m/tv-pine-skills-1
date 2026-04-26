@@ -1,12 +1,11 @@
 ---
 name: buying-selling-volume
 description: |
-  Use the Buying Selling Volume TradingView indicator to analyze volume pressure, detect buying vs selling dominance, and identify MA cross signals for directional trade setups. This skill triggers when the user wants to: analyze volume pressure, detect buying vs selling volume, find volume-based trend signals, identify volume MA crosses, or trade volume decomposition patterns. Also triggers when the user runs `buying-selling-volume.cjs` or mentions terms like "buying volume", "selling volume", "volume pressure", "volume MA", or "volume decomposition".
+  Use the Buying Selling Volume TradingView indicator to analyze volume pressure, detect buying vs selling dominance, and identify MA cross signals for directional trade setups.
 version: 1.0.0
-compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
 metadata:
   hermes:
-    tags: [trading, tradingview, pine-script, technical-analysis]
+    tags: [trading, tradingview, pine-script, volume-pressure, ma-cross]
     category: trading
 ---
 
@@ -145,6 +144,16 @@ node buying-selling-volume.cjs <SYMBOL> --tf <tf> --bars <bars>
 
 **Example story (bullish):**
 > "Volume pressure is STRONGLY_BULLISH. Buy vol avg 2450 vs sell vol avg 1800. Last BULLISH_CROSS 3 bars ago. Current background is bull (4) with bar state BOTH_ABOVE. Buy pressure dominant in 14/20 recent bars. Long bias — entry on pullback to MA level, SL below recent swing."
+
+
+## Verification
+
+To confirm this skill executed correctly:
+
+1. Run `node buying-selling-volume.cjs BTCUSDT --agent`
+2. Confirm the JSON output contains a `status: "ok"` field
+3. Verify the output includes indicator-specific data (see schema sections above)
+4. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 

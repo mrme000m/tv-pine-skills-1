@@ -1,12 +1,11 @@
 ---
 name: anchored-clusters-vp
 description: |
-  Use the Anchored Clusters Volume Profile TradingView indicator to analyze volume distribution, identify Point of Control (POC) levels, and detect cluster extremes for structural trade setups. This skill triggers when the user wants to: analyze volume clusters, find POC levels, identify anchored volume profile zones, detect cluster-based support/resistance, or trade volume profile extremes. Also triggers when the user runs `anchored-clusters-vp.cjs` or mentions terms like "anchored clusters", "volume profile", "POC", "cluster", "volume distribution", or "value area".
+  Use the Anchored Clusters Volume Profile TradingView indicator to analyze volume distribution, identify Point of Control (POC) levels, and detect cluster extremes for structural trade setups.
 version: 1.0.0
-compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
 metadata:
   hermes:
-    tags: [trading, tradingview, pine-script, technical-analysis]
+    tags: [trading, tradingview, pine-script, volume-profile, poc]
     category: trading
 ---
 
@@ -161,6 +160,16 @@ From the output, answer:
 
 **Example story (bullish):**
 > "Volume profile shows 12 clusters across a 3200 USDT range. VW-POC at 67245. Price is above POC with latest cluster at 67800-68100. The cluster extreme low at 64500 is key support. Long bias on POC retest from above, SL below 64500, targeting 69000 (next cluster high)."
+
+
+## Verification
+
+To confirm this skill executed correctly:
+
+1. Run `node anchored-clusters-vp.cjs BTCUSDT --agent`
+2. Confirm the JSON output contains a `status: "ok"` field
+3. Verify the output includes indicator-specific data (see schema sections above)
+4. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 

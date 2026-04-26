@@ -1,12 +1,11 @@
 ---
 name: delta-volume-intensity
 description: |
-  Use the Delta Volume Intensity TradingView indicator to analyze trend direction, support/resistance levels, and rate-of-change momentum for structural trade setups. This skill triggers when the user wants to: analyze delta volume trends, detect trend changes, find support/resistance levels from volume analysis, identify ROC momentum shifts, or trade trend-alert signals. Also triggers when the user runs `delta-volume-intensity.cjs` or mentions terms like "delta volume", "volume intensity", "trend alert", "volume ROC", "volume momentum", or "delta intensity".
+  Use the Delta Volume Intensity TradingView indicator to analyze trend direction, support/resistance levels, and rate-of-change momentum for structural trade setups.
 version: 1.0.0
-compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
 metadata:
   hermes:
-    tags: [trading, tradingview, pine-script, technical-analysis]
+    tags: [trading, tradingview, pine-script, volume-momentum, trend-alerts]
     category: trading
 ---
 
@@ -165,6 +164,16 @@ node delta-volume-intensity.cjs <SYMBOL> --tf <tf> --bars <bars>
 
 **Example story (bullish):**
 > "Delta Volume shows UPTREND dominant (312 of 500 bars). Current trend=UPTREND, background=UPTREND. Support at 67200, resistance at 68900. ROC is +2.4% (positive momentum). Last uptrend alert 5 bars ago. ATR is 145. Long bias — entry on pullback to 67200 support, SL at 66950 (1.7× ATR below), targeting 68900 resistance."
+
+
+## Verification
+
+To confirm this skill executed correctly:
+
+1. Run `node delta-volume-intensity.cjs BTCUSDT --agent`
+2. Confirm the JSON output contains a `status: "ok"` field
+3. Verify the output includes indicator-specific data (see schema sections above)
+4. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 

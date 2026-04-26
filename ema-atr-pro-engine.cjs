@@ -9,6 +9,7 @@ const path = require('path');
 const SCRIPT_DIR = path.dirname(__filename);
 require('dotenv').config({ path: path.join(SCRIPT_DIR, '.env') });
 const tv = require('./tv-optimized.cjs');
+const { AgentOutput, enableSilentMode, isSilent } = require('./agent-output.cjs');
 
 const PINE_ID = 'PUB;7d5f8755ab67400899ef73a9898471e4';
 const SCRIPT_NAME = 'EMA + ATR PRO Ultimate Engine';
@@ -33,7 +34,7 @@ const INPUT_MAP = [
 ];
 
 function parseArgs(argv) {
-  const args = { _symbol: argv[0]?.toUpperCase() || null, symbol: 'BTCUSDT', tf: '15m', bars: 500, json: false, out: null, agent: false, verbose: false, dryRun: false, inputs: {} };
+  const args = { _symbol: argv[0]?.toUpperCase() || null, symbol: 'BTCUSDT', tf: '15m', bars: 500, json: false, out: null, agent: false, verbose: false, dryRun: false, silent: false, inputs: {} };
   let start = 0;
   if (args._symbol && !args._symbol.startsWith('-')) { args.symbol = args._symbol; start = 1; }
   for (let i = start; i < argv.length; i++) {
@@ -47,6 +48,7 @@ function parseArgs(argv) {
     else if (a === '--agent') { args.json = true; args.agent = true; }
     else if (a === '--verbose' || a === '-v') args.verbose = true;
     else if (a === '--dry-run') args.dryRun = true;
+    else if (a === '--silent') args.silent = true;
     else if (a === '--help' || a === '-h') args.help = true;
   }
   return args;
@@ -201,28 +203,34 @@ function transformForAgentMode(result, args) {
     opportunities: signals.map(s => ({ rank: s.rank, setup: s.setupType, direction: s.direction, confidence: s.confidence, confluenceScore: s.confluenceScore, distanceFromPrice: null, isStale: false, rationale: s.rationale })),
     narrative, conformance: { hasValidData: summary.totalBars > 0, agenticScore: enhanced.agenticScore },
     schemaVersion: 'agent-ready-v2.0.0',
+    _parserMeta: {
+      schemaVersion: 'agent-ready-v2.1.0',
+      emittedAt: new Date().toISOString(),
+      deterministic: true,
+      workflow: 'ema-atr-structure',
+    },
   };
 }
 
 function printResults(result) {
   const { summary, currentBar, last10Bars, labels, signals, narrative, meta, enhanced } = result;
-  console.log('\n══════════════════════════════════════════════════════════════════════');
-  console.log('  EMA + ATR PRO ENGINE — ANALYSIS RESULTS');
-  console.log('══════════════════════════════════════════════════════════════════════');
-  console.log(`\n📊 SUMMARY (${summary.totalBars} bars)`);
-  console.log(`   Trail Trend: ${summary.trailTrend} | Combined: ${summary.combinedTrend}`);
-  console.log(`   Buy Signals: ${summary.buySignals} | Sell Signals: ${summary.sellSignals}`);
-  console.log(`   Buy Reentries: ${summary.buyReentries} | Sell Reentries: ${summary.sellReentries}`);
-  console.log(`   Avg Trail: ${summary.averageTrail} | Avg EMA2: ${summary.averageEMA2} | Avg EMA3: ${summary.averageEMA3}`);
-  console.log(`\n📈 CURRENT BAR`);
-  console.log(`   Trail: ${currentBar.trail} | EMA2: ${currentBar.ema2} | EMA3: ${currentBar.ema3}`);
-  console.log(`   Buy: ${currentBar.buySignal} | Sell: ${currentBar.sellSignal} | Reentry: ${currentBar.buyReentry || currentBar.sellReentry}`);
-  console.log(`   EMA2 Bull: ${currentBar.ema2Bull} | EMA3 Bull: ${currentBar.ema3Bull}`);
-  if (labels.buys.length > 0 || labels.sells.length > 0) console.log(`   Labels: ${labels.buys.length} buy / ${labels.sells.length} sell`);
-  if (signals.length > 0) { console.log('\n🎯 SIGNALS'); signals.forEach(s => console.log(`   ${s.direction.toUpperCase()} | ${s.confidence} | ${s.rationale}`)); }
-  if (narrative.warnings.length > 0) { console.log('\n⚠️ WARNINGS'); narrative.warnings.forEach(w => console.log(`   • ${w}`)); }
-  console.log(`\nℹ️ META | Duration: ${meta.durationMs}ms | Score: ${enhanced.agenticScore}`);
-  console.log('══════════════════════════════════════════════════════════════════════\n');
+  AgentOutput.info('\n══════════════════════════════════════════════════════════════════════');
+  AgentOutput.info('  EMA + ATR PRO ENGINE — ANALYSIS RESULTS');
+  AgentOutput.info('══════════════════════════════════════════════════════════════════════');
+  AgentOutput.info(`\n📊 SUMMARY (${summary.totalBars} bars)`);
+  AgentOutput.info(`   Trail Trend: ${summary.trailTrend} | Combined: ${summary.combinedTrend}`);
+  AgentOutput.info(`   Buy Signals: ${summary.buySignals} | Sell Signals: ${summary.sellSignals}`);
+  AgentOutput.info(`   Buy Reentries: ${summary.buyReentries} | Sell Reentries: ${summary.sellReentries}`);
+  AgentOutput.info(`   Avg Trail: ${summary.averageTrail} | Avg EMA2: ${summary.averageEMA2} | Avg EMA3: ${summary.averageEMA3}`);
+  AgentOutput.info(`\n📈 CURRENT BAR`);
+  AgentOutput.info(`   Trail: ${currentBar.trail} | EMA2: ${currentBar.ema2} | EMA3: ${currentBar.ema3}`);
+  AgentOutput.info(`   Buy: ${currentBar.buySignal} | Sell: ${currentBar.sellSignal} | Reentry: ${currentBar.buyReentry || currentBar.sellReentry}`);
+  AgentOutput.info(`   EMA2 Bull: ${currentBar.ema2Bull} | EMA3 Bull: ${currentBar.ema3Bull}`);
+  if (labels.buys.length > 0 || labels.sells.length > 0) AgentOutput.info(`   Labels: ${labels.buys.length} buy / ${labels.sells.length} sell`);
+  if (signals.length > 0) { AgentOutput.info('\n🎯 SIGNALS'); signals.forEach(s => AgentOutput.info(`   ${s.direction.toUpperCase()} | ${s.confidence} | ${s.rationale}`)); }
+  if (narrative.warnings.length > 0) { AgentOutput.info('\n⚠️ WARNINGS'); narrative.warnings.forEach(w => AgentOutput.info(`   • ${w}`)); }
+  AgentOutput.info(`\nℹ️ META | Duration: ${meta.durationMs}ms | Score: ${enhanced.agenticScore}`);
+  AgentOutput.info('══════════════════════════════════════════════════════════════════════\n');
 }
 
 async function runWebSocket(symbol, tf, bars, startTime, inputs) {
@@ -268,13 +276,14 @@ async function runWebSocket(symbol, tf, bars, startTime, inputs) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || (!args._symbol && process.argv.length <= 2)) { printUsage(); process.exit(0); }
+  if (args.silent || args.agent) enableSilentMode(true);
   const startTime = Date.now();
-  console.log(`\n📊 Running: ${PINE_ID} | ${args.symbol} | ${args.tf} | ${args.bars} bars`);
+  AgentOutput.info(`\n📊 Running: ${PINE_ID} | ${args.symbol} | ${args.tf} | ${args.bars} bars`);
   if (args.dryRun) { console.log('\n🏜️ DRY RUN'); console.log(JSON.stringify({ status: 'dry_run', ...args, timestamp: new Date().toISOString() }, null, 2)); process.exit(EXIT_CODES.SUCCESS); }
   try {
     const result = await runWebSocket(args.symbol, args.tf, args.bars, startTime, args.inputs);
     if (args.verbose) console.log(`\n✓ Completed in ${result.meta.durationMs}ms`);
-    if (args.json) { const output = args.agent ? transformForAgentMode(result, args) : result; const json = JSON.stringify(output, null, 2); if (args.out) { fs.writeFileSync(args.out, json); console.log(`✅ Saved to ${args.out}`); } else console.log(json); }
+    if (args.json || args.agent) { const output = args.agent ? transformForAgentMode(result, args) : result; AgentOutput.emit(output, { outPath: args.out, pretty: !isSilent() }); }
     else printResults(result);
     process.exit(EXIT_CODES.SUCCESS);
   } catch (err) { const isCritical = /SESSION|SIGNATURE|connection/i.test(err.message); console.error(`\n❌ Error: ${err.message}`); process.exit(isCritical ? EXIT_CODES.CRITICAL : EXIT_CODES.VALIDATION); }

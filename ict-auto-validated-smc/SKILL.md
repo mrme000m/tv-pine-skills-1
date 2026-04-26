@@ -1,12 +1,11 @@
 ---
 name: ict-auto-validated-smc
 description: |
-  Use the ICT Auto-Validated SMC TradingView indicator to analyze any symbol/timeframe and extract Smart Money Concepts structural trading signals. This skill triggers when the user wants to: identify order blocks, fair value gaps, breaker blocks, BPRs, structure breaks (BOS/CHoCH), or trade with ICT methodology. Also triggers when the user runs `ict-auto-validated-smc.cjs` or mentions terms like "ICT", "SMC", "order block", "FVG", "fair value gap", "breaker", "BOS", "CHoCH", "smart money", "institutional order flow", or "liquidity sweep".
+  Use the ICT Auto-Validated SMC TradingView indicator to analyze any symbol/timeframe and extract Smart Money Concepts structural trading signals.
 version: 1.0.0
-compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
 metadata:
   hermes:
-    tags: [trading, tradingview, pine-script, technical-analysis]
+    tags: [trading, tradingview, pine-script, ict, smc, bos-choch]
     category: trading
 ---
 
@@ -236,6 +235,16 @@ From the output, answer:
 
 **Example story (bullish):**
 > "Structure is BULLISH with last break BOS ▲. HTF (240) is BULLISH — fully aligned. Price is in DISCOUNT zone. Active: 3 OBs, 2 FVGs, 1 breaker. Best OB: ★★★★☆ bullish at 76800-77000 (discount). Signal: Long 4/10 (29 bars ago). SL below OB low at 76750. Target nearest FVG at 77500."
+
+
+## Verification
+
+To confirm this skill executed correctly:
+
+1. Run `node ict-auto-validated-smc.cjs BTCUSDT --agent`
+2. Confirm the JSON output contains a `status: "ok"` field
+3. Verify the output includes indicator-specific data (see schema sections above)
+4. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 

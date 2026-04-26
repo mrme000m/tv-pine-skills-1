@@ -1,12 +1,11 @@
 ---
 name: self-aware-trend-system
 description: |
-  Use the Self-Aware Trend System [WillyAlgoTrader] TradingView indicator to analyze any symbol/timeframe and extract adaptive trend-following signals. This skill triggers when the user wants to: analyze trend quality, detect regime changes, get SuperTrend-based trade signals, monitor TQI (Trend Quality Index), or use adaptive asymmetric bands for trade setups. Also triggers when the user runs `self-aware-trend-system.cjs` or mentions terms like "Self-Aware Trend", "WillyAlgoTrader", "TQI", "trend quality", "adaptive SuperTrend", "character flip", or "asymmetric bands".
+  Use the Self-Aware Trend System [WillyAlgoTrader] TradingView indicator to analyze any symbol/timeframe and extract adaptive trend-following signals.
 version: 1.0.0
-compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
 metadata:
   hermes:
-    tags: [trading, tradingview, pine-script, technical-analysis]
+    tags: [trading, tradingview, pine-script, supertrend, tqi, regime]
     category: trading
 ---
 
@@ -203,6 +202,16 @@ From the output, answer:
 
 **Example story (bullish):**
 > "Market is BULLISH with HIGH quality (TQI 0.72). Regime: Trending / Norm Vol. TQI components: Efficiency 0.65, Volatility 0.80, Structure 0.70, Mom Persist 0.75. Latest signal: BUY 24/30. Active trade plan at entry 77400 with SL 76800 (1.0R), TP1 78000, TP2 78600. Win rate in this regime: 42%. Regime edge: +0.15R (n=23)."
+
+
+## Verification
+
+To confirm this skill executed correctly:
+
+1. Run `node self-aware-trend-system.cjs BTCUSDT --agent`
+2. Confirm the JSON output contains a `status: "ok"` field
+3. Verify the output includes indicator-specific data (see schema sections above)
+4. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 

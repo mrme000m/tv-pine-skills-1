@@ -11,6 +11,7 @@ const path = require('path');
 const SCRIPT_DIR = path.dirname(__filename);
 require('dotenv').config({ path: path.join(SCRIPT_DIR, '.env') });
 const tv = require('./tv-optimized.cjs');
+const { AgentOutput, enableSilentMode, isSilent } = require('./agent-output.cjs');
 
 const PINE_ID = 'PUB;6daafb2cabe6419d98ae25229d2327f8';
 const SCRIPT_NAME = 'Smart Money Concepts';
@@ -72,7 +73,7 @@ const INPUT_MAP = [
 ];
 
 function parseArgs(argv) {
-  const args = { _symbol: argv[0]?.toUpperCase() || null, symbol: 'BTCUSDT', tf: '15m', bars: 500, json: false, out: null, agent: false, verbose: false, dryRun: false, inputs: {} };
+  const args = { _symbol: argv[0]?.toUpperCase() || null, symbol: 'BTCUSDT', tf: '15m', bars: 500, json: false, out: null, agent: false, verbose: false, dryRun: false, silent: false, inputs: {} };
   let start = 0;
   if (args._symbol && !args._symbol.startsWith('-')) { args.symbol = args._symbol; start = 1; }
   for (let i = start; i < argv.length; i++) {
@@ -86,6 +87,7 @@ function parseArgs(argv) {
     else if (a === '--agent') { args.json = true; args.agent = true; }
     else if (a === '--verbose' || a === '-v') args.verbose = true;
     else if (a === '--dry-run') args.dryRun = true;
+    else if (a === '--silent') args.silent = true;
     else if (a === '--help' || a === '-h') args.help = true;
   }
   return args;
@@ -95,7 +97,7 @@ function printUsage() {
   console.log(`
 Smart Money Concepts (LuxAlgo) — Standalone Runner
 Usage: node smart-money-concepts.cjs <SYMBOL> [options]
-Options: --tf, --bars, --input key=value, --json, --agent, --out, --verbose, --dry-run, --help
+Options: --tf, --bars, --input key=value, --json, --agent, --out, --verbose, --dry-run, --silent, --help
 Inputs: modeInput, styleInput, showTrendInput, showInternalsInput, showInternalBullInput, internalBullColorInput, showInternalBearInput, internalBearColorInput, internalFilterConfluenceInput, internalStructureSize, showStructureInput, showSwingBullInput, swingBullColorInput, showSwingBearInput, swingBearColorInput, swingStructureSize, showSwingsInput, swingsLengthInput, showHighLowSwingsInput, showInternalOrderBlocksInput, internalOrderBlocksSizeInput, showSwingOrderBlocksInput, swingOrderBlocksSizeInput, orderBlockFilterInput, orderBlockMitigationInput, internalBullishOrderBlockColor, internalBearishOrderBlockColor, swingBullishOrderBlockColor, swingBearishOrderBlockColor, showEqualHighsLowsInput, equalHighsLowsLengthInput, equalHighsLowsThresholdInput, equalHighsLowsSizeInput, showFairValueGapsInput, fairValueGapsThresholdInput, fairValueGapsTimeframeInput, fairValueGapsBullColorInput, fairValueGapsBearColorInput, fairValueGapsExtendInput, showDailyLevelsInput, dailyLevelsStyleInput, dailyLevelsColorInput, showWeeklyLevelsInput, weeklyLevelsStyleInput, weeklyLevelsColorInput, showMonthlyLevelsInput, monthlyLevelsStyleInput, monthlyLevelsColorInput, showPremiumDiscountZonesInput, premiumZoneColorInput, equilibriumZoneColorInput, discountZoneColorInput
 `);
 }
@@ -498,26 +500,32 @@ function transformForAgentMode(result, args) {
     opportunities: signals.map(s => ({ rank: s.rank, setup: s.setupType, direction: s.direction, confidence: s.confidence, confluenceScore: s.confluenceScore, distanceFromPrice: null, isStale: false, rationale: s.rationale })),
     narrative, conformance: { hasValidData: summary.totalLabels > 0 || summary.totalBoxes > 0, agenticScore: enhanced.agenticScore },
     schemaVersion: 'agent-ready-v2.0.0',
+    _parserMeta: {
+      schemaVersion: 'agent-ready-v2.1.0',
+      emittedAt: new Date().toISOString(),
+      deterministic: true,
+      workflow: 'smart-money-concepts',
+    },
   };
 }
 
 function printResults(result) {
   const { summary, bosLabels, chochLabels, fvgBoxes, obBoxes, eqhLines, activeOBs, activeFVGs, signals, narrative, meta, enhanced } = result;
-  console.log('\n══════════════════════════════════════════════════════════════════════');
-  console.log('  SMART MONEY CONCEPTS — ANALYSIS RESULTS');
-  console.log('══════════════════════════════════════════════════════════════════════');
-  console.log(`\n📊 STRUCTURE (${summary.totalLabels} labels, ${summary.totalBoxes} boxes, ${summary.totalLines} lines)`);
-  console.log(`   BOS: ${summary.bosCount} | CHoCH: ${summary.chochCount} | FVG: ${summary.fvgCount} | OB: ${summary.obCount} | EQH: ${summary.eqhCount}`);
-  console.log(`   Active OBs: ${summary.activeOBs} | Active FVGs: ${summary.activeFVGs}`);
-  console.log(`   Bias: ${summary.structureBias} | Score: ${summary.biasScore}`);
-  if (bosLabels.length > 0) { console.log('\n📈 RECENT BOS'); bosLabels.slice(-3).forEach(l => console.log(`   ${l.isBullish ? 'BULL' : 'BEAR'}: ${l.t}`)); }
-  if (chochLabels.length > 0) { console.log('\n📉 RECENT CHoCH'); chochLabels.slice(-3).forEach(l => console.log(`   ${l.isBullish ? 'BULL' : 'BEAR'}: ${l.t}`)); }
-  if (activeOBs.length > 0) { console.log('\n📦 ACTIVE OBs'); activeOBs.slice(-3).forEach(b => console.log(`   ${_round(b.top)}-${_round(b.bottom)} | ${b.isBullish ? 'BULL' : b.isBearish ? 'BEAR' : '?'}${b.isMitigated ? ' [M]' : ''}`)); }
-  if (activeFVGs.length > 0) { console.log('\n⚡ ACTIVE FVGs'); activeFVGs.slice(-3).forEach(b => console.log(`   ${_round(b.top)}-${_round(b.bottom)} | Size: ${_round(b.size)}`)); }
-  if (signals.length > 0) { console.log('\n🎯 SIGNALS'); signals.forEach(s => console.log(`   ${s.direction.toUpperCase()} | ${s.confidence} | ${s.rationale}`)); }
-  if (narrative.warnings.length > 0) { console.log('\n⚠️ WARNINGS'); narrative.warnings.forEach(w => console.log(`   • ${w}`)); }
-  console.log(`\nℹ️ META | Duration: ${meta.durationMs}ms | Score: ${enhanced.agenticScore}`);
-  console.log('══════════════════════════════════════════════════════════════════════\n');
+  AgentOutput.info('\n══════════════════════════════════════════════════════════════════════');
+  AgentOutput.info('  SMART MONEY CONCEPTS — ANALYSIS RESULTS');
+  AgentOutput.info('══════════════════════════════════════════════════════════════════════');
+  AgentOutput.info(`\n📊 STRUCTURE (${summary.totalLabels} labels, ${summary.totalBoxes} boxes, ${summary.totalLines} lines)`);
+  AgentOutput.info(`   BOS: ${summary.bosCount} | CHoCH: ${summary.chochCount} | FVG: ${summary.fvgCount} | OB: ${summary.obCount} | EQH: ${summary.eqhCount}`);
+  AgentOutput.info(`   Active OBs: ${summary.activeOBs} | Active FVGs: ${summary.activeFVGs}`);
+  AgentOutput.info(`   Bias: ${summary.structureBias} | Score: ${summary.biasScore}`);
+  if (bosLabels.length > 0) { AgentOutput.info('\n📈 RECENT BOS'); bosLabels.slice(-3).forEach(l => AgentOutput.info(`   ${l.isBullish ? 'BULL' : 'BEAR'}: ${l.t}`)); }
+  if (chochLabels.length > 0) { AgentOutput.info('\n📉 RECENT CHoCH'); chochLabels.slice(-3).forEach(l => AgentOutput.info(`   ${l.isBullish ? 'BULL' : 'BEAR'}: ${l.t}`)); }
+  if (activeOBs.length > 0) { AgentOutput.info('\n📦 ACTIVE OBs'); activeOBs.slice(-3).forEach(b => AgentOutput.info(`   ${_round(b.top)}-${_round(b.bottom)} | ${b.isBullish ? 'BULL' : b.isBearish ? 'BEAR' : '?'}${b.isMitigated ? ' [M]' : ''}`)); }
+  if (activeFVGs.length > 0) { AgentOutput.info('\n⚡ ACTIVE FVGs'); activeFVGs.slice(-3).forEach(b => AgentOutput.info(`   ${_round(b.top)}-${_round(b.bottom)} | Size: ${_round(b.size)}`)); }
+  if (signals.length > 0) { AgentOutput.info('\n🎯 SIGNALS'); signals.forEach(s => AgentOutput.info(`   ${s.direction.toUpperCase()} | ${s.confidence} | ${s.rationale}`)); }
+  if (narrative.warnings.length > 0) { AgentOutput.info('\n⚠️ WARNINGS'); narrative.warnings.forEach(w => AgentOutput.info(`   • ${w}`)); }
+  AgentOutput.info(`\nℹ️ META | Duration: ${meta.durationMs}ms | Score: ${enhanced.agenticScore}`);
+  AgentOutput.info('══════════════════════════════════════════════════════════════════════\n');
 }
 
 async function runWebSocket(symbol, tf, bars, startTime, inputs) {
@@ -562,13 +570,14 @@ async function runWebSocket(symbol, tf, bars, startTime, inputs) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || (!args._symbol && process.argv.length <= 2)) { printUsage(); process.exit(0); }
+  if (args.silent || args.agent) enableSilentMode(true);
   const startTime = Date.now();
-  console.log(`\n📊 Running: ${PINE_ID} | ${args.symbol} | ${args.tf} | ${args.bars} bars`);
+  AgentOutput.info(`\n📊 Running: ${PINE_ID} | ${args.symbol} | ${args.tf} | ${args.bars} bars`);
   if (args.dryRun) { console.log('\n🏜️ DRY RUN'); console.log(JSON.stringify({ status: 'dry_run', ...args, timestamp: new Date().toISOString() }, null, 2)); process.exit(EXIT_CODES.SUCCESS); }
   try {
     const result = await runWebSocket(args.symbol, args.tf, args.bars, startTime, args.inputs);
     if (args.verbose) console.log(`\n✓ Completed in ${result.meta.durationMs}ms`);
-    if (args.json) { const output = args.agent ? transformForAgentMode(result, args) : result; const json = JSON.stringify(output, null, 2); if (args.out) { fs.writeFileSync(args.out, json); console.log(`✅ Saved to ${args.out}`); } else console.log(json); }
+    if (args.json || args.agent) { const output = args.agent ? transformForAgentMode(result, args) : result; AgentOutput.emit(output, { outPath: args.out, pretty: !isSilent() }); }
     else printResults(result);
     process.exit(EXIT_CODES.SUCCESS);
   } catch (err) { const isCritical = /SESSION|SIGNATURE|connection/i.test(err.message); console.error(`\n❌ Error: ${err.message}`); process.exit(isCritical ? EXIT_CODES.CRITICAL : EXIT_CODES.VALIDATION); }

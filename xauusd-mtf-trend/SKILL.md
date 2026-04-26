@@ -1,12 +1,11 @@
 ---
 name: xauusd-mtf-trend
 description: |
-  Use the XAUUSD MTF Trend Dashboard TradingView indicator to analyze multi-timeframe trend alignment across multiple timeframes and identify high-probability directional bias for XAUUSD and other symbols. This skill triggers when the user wants to: analyze multi-timeframe trends, check MTF alignment, detect cross-timeframe bias, find MTF confluence, or trade with multi-timeframe confirmation. Also triggers when the user runs `xauusd-mtf-trend.cjs` or mentions terms like "MTF trend", "multi timeframe", "timeframe alignment", "MTF dashboard", "trend dashboard", or "cross timeframe".
+  Use the XAUUSD MTF Trend Dashboard TradingView indicator to analyze multi-timeframe trend alignment across multiple timeframes and identify high-probability directional bias for XAUUSD and other symbols.
 version: 1.0.0
-compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
 metadata:
   hermes:
-    tags: [trading, tradingview, pine-script, technical-analysis]
+    tags: [trading, tradingview, pine-script, multi-timeframe, trend-dashboard]
     category: trading
 ---
 
@@ -154,6 +153,16 @@ node xauusd-mtf-trend.cjs <SYMBOL> --tf <tf> --bars <bars>
 
 **Example story (bullish):**
 > "MTF Dashboard: STRONGLY_BULLISH. 5 of 6 timeframes bullish (1m mixed, rest bull). Labels show bull annotations at 67100 and 67350. Level at 67000 acting as support. Higher TFs (1h, 4h, 1D) all bullish. Lower TFs aligning. Long bias — entry on 1m turning bullish, SL below 67000, targeting 68000."
+
+
+## Verification
+
+To confirm this skill executed correctly:
+
+1. Run `node xauusd-mtf-trend.cjs BTCUSDT --agent`
+2. Confirm the JSON output contains a `status: "ok"` field
+3. Verify the output includes indicator-specific data (see schema sections above)
+4. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 

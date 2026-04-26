@@ -1,12 +1,11 @@
 ---
 name: ema-atr-pro-engine
 description: |
-  Use the EMA + ATR PRO Ultimate Engine TradingView indicator to track signal activation history, analyze EMA trail trends, and identify high-probability entry/exit setups based on ATR-based trailing stops and EMA crossovers. This skill triggers when the user wants to: analyze EMA trail signals, track signal history, find ATR-based entry points, detect EMA crossovers, or trade with trailing stop logic. Also triggers when the user runs `ema-atr-pro-engine.cjs` or mentions terms like "EMA ATR", "trail signal", "ATR engine", "EMA crossover", "trailing stop", or "signal history".
+  Use the EMA + ATR PRO Ultimate Engine TradingView indicator to track signal activation history, analyze EMA trail trends, and identify high-probability entry/exit setups based on ATR-based trailing stops and EMA crossovers.
 version: 1.0.0
-compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
 metadata:
   hermes:
-    tags: [trading, tradingview, pine-script, technical-analysis]
+    tags: [trading, tradingview, pine-script, ema, atr-trail]
     category: trading
 ---
 
@@ -162,6 +161,16 @@ node ema-atr-pro-engine.cjs <SYMBOL> --tf <tf> --bars <bars>
 
 **Example story (bullish):**
 > "EMA+ATR Engine shows BULLISH trail trend. Buy signals: 8, Sell signals: 3. Current trail at 67120, EMA2 at 67250, EMA3 at 67080. Active buy signal with no reentry. Price above trail and EMA2 > EMA3. Long bias — entry on current signal, SL at trail (67120), targeting 67800."
+
+
+## Verification
+
+To confirm this skill executed correctly:
+
+1. Run `node ema-atr-pro-engine.cjs BTCUSDT --agent`
+2. Confirm the JSON output contains a `status: "ok"` field
+3. Verify the output includes indicator-specific data (see schema sections above)
+4. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 

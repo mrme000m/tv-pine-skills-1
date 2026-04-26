@@ -1,12 +1,11 @@
 ---
 name: shemar-smc-confidence
 description: |
-  Use the SHEMAR HMA ST + SMC Confidence Filter TradingView indicator to analyze HMA, Supertrend, and Kernel convergence for high-confidence filtered trading signals. This skill triggers when the user wants to: analyze HMA supertrend alignment, detect kernel convergence, find SMC confidence signals, filter raw signals for quality, or trade with multi-indicator confirmation. Also triggers when the user runs `shemar-smc-confidence.cjs` or mentions terms like "SHEMAR", "HMA supertrend", "SMC confidence", "kernel convergence", "filtered signals", or "multi-indicator alignment".
+  Use the SHEMAR HMA ST + SMC Confidence Filter TradingView indicator to analyze HMA, Supertrend, and Kernel convergence for high-confidence filtered trading signals.
 version: 1.0.0
-compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
 metadata:
   hermes:
-    tags: [trading, tradingview, pine-script, technical-analysis]
+    tags: [trading, tradingview, pine-script, hma, supertrend, kernel]
     category: trading
 ---
 
@@ -154,6 +153,16 @@ node shemar-smc-confidence.cjs <SYMBOL> --tf <tf> --bars <bars>
 
 **Example story (bullish):**
 > "SHEMAR alignment: FULLY_ALIGNED_BULLISH. HMA=bull, ST=bull, Kernel=67120 > HMA=67050. Raw buy: 12, Filtered buy: 8. Current FilteredBuy active. No recent close signals. High-confidence long — entry on current filtered signal, SL below Supertrend at 66900, targeting 67800."
+
+
+## Verification
+
+To confirm this skill executed correctly:
+
+1. Run `node shemar-smc-confidence.cjs BTCUSDT --agent`
+2. Confirm the JSON output contains a `status: "ok"` field
+3. Verify the output includes indicator-specific data (see schema sections above)
+4. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 

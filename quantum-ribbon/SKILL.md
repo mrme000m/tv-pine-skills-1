@@ -1,12 +1,11 @@
 ---
 name: quantum-ribbon
 description: |
-  Use the Quantum Ribbon Lite TradingView indicator to analyze multi-layer EMA alignment, detect ribbon crossovers, and identify trend strength through 5-layer ribbon momentum analysis. This skill triggers when the user wants to: analyze EMA ribbon alignment, detect ribbon crossovers, measure trend strength from multiple EMAs, find multi-layer confluence, or trade ribbon-based signals. Also triggers when the user runs `quantum-ribbon.cjs` or mentions terms like "quantum ribbon", "EMA ribbon", "ribbon crossover", "multi EMA", "ribbon alignment", or "EMA cloud".
+  Use the Quantum Ribbon Lite TradingView indicator to analyze multi-layer EMA alignment, detect ribbon crossovers, and identify trend strength through 5-layer ribbon momentum analysis.
 version: 1.0.0
-compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
 metadata:
   hermes:
-    tags: [trading, tradingview, pine-script, technical-analysis]
+    tags: [trading, tradingview, pine-script, ema-ribbon, trend-strength]
     category: trading
 ---
 
@@ -173,6 +172,16 @@ node quantum-ribbon.cjs <SYMBOL> --tf <tf> --bars <bars>
 
 **Example story (bullish):**
 > "Quantum Ribbon: strong_bull (5/5 layers bullish). Spread: 145 USDT (0.21%). Fast slope rising (+0.004). Last bullish cross 2 bars ago. BuySignal active. No StopHit. Strong long bias — entry on pullback to EMA cluster, SL below Plot_10, targeting next resistance."
+
+
+## Verification
+
+To confirm this skill executed correctly:
+
+1. Run `node quantum-ribbon.cjs BTCUSDT --agent`
+2. Confirm the JSON output contains a `status: "ok"` field
+3. Verify the output includes indicator-specific data (see schema sections above)
+4. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 

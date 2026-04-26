@@ -1,12 +1,11 @@
 ---
 name: support-resistance-breaks
 description: |
-  Use the Support and Resistance Breaks TradingView indicator to detect pivot-based S/R level breaks, measure break intensity, and identify price position relative to key structural levels. This skill triggers when the user wants to: detect support resistance breaks, find pivot breakouts, analyze break intensity, identify S/R levels, or trade structural breaks. Also triggers when the user runs `support-resistance-breaks.cjs` or mentions terms like "S/R breaks", "support break", "resistance break", "pivot break", "breakout", "break intensity", or "structural break".
+  Use the Support and Resistance Breaks TradingView indicator to detect pivot-based S/R level breaks, measure break intensity, and identify price position relative to key structural levels.
 version: 1.0.0
-compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
 metadata:
   hermes:
-    tags: [trading, tradingview, pine-script, technical-analysis]
+    tags: [trading, tradingview, pine-script, support-resistance, pivot]
     category: trading
 ---
 
@@ -161,6 +160,16 @@ node support-resistance-breaks.cjs <SYMBOL> --tf <tf> --bars <bars>
 
 **Example story (bullish):**
 > "Price is ABOVE_RESISTANCE at 68900. Break intensity: 0.045 (4.5%). Resistance breaks: 12 vs Support breaks: 5. Current resistance: 68900, support: 67200. Distance to resistance: 0 (just broke). Strong long — entry on retest of 68900 as support, SL at 68650, targeting 70000 (next structural level)."
+
+
+## Verification
+
+To confirm this skill executed correctly:
+
+1. Run `node support-resistance-breaks.cjs BTCUSDT --agent`
+2. Confirm the JSON output contains a `status: "ok"` field
+3. Verify the output includes indicator-specific data (see schema sections above)
+4. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 

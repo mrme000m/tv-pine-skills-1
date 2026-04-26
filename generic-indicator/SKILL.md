@@ -1,12 +1,11 @@
 ---
 name: generic-indicator
 description: |
-  Use the Generic Pine Script Indicator runner to analyze ANY TradingView indicator on any symbol/timeframe. This skill triggers when the user wants to: run an arbitrary Pine script, extract data from a custom indicator, analyze numerical plots and graphics from any public or private indicator, or get structured output from indicators not covered by specific skills. Also triggers when the user runs `generic-indicator.cjs` or mentions terms like "generic indicator", "custom pine script", "run any indicator", "extract indicator data", or provides a specific Pine ID like "PUB;..." or "USER;..." without a dedicated skill.
+  Use the Generic Pine Script Indicator runner to analyze ANY TradingView indicator on any symbol/timeframe.
 version: 1.0.0
-compatibility: Requires Node.js 18+, tv.cjs WebSocket client, and TradingView SESSION/SIGNATURE credentials
 metadata:
   hermes:
-    tags: [trading, tradingview, pine-script, technical-analysis]
+    tags: [trading, tradingview, pine-script, universal-runner, pine-id]
     category: trading
 ---
 
@@ -230,6 +229,16 @@ The runner attempts to match inputs by:
 2. Input name (case-insensitive)
 
 Types are auto-detected from the indicator's metadata.
+
+
+## Verification
+
+To confirm this skill executed correctly:
+
+1. Run `node generic-indicator.cjs BTCUSDT --agent`
+2. Confirm the JSON output contains a `status: "ok"` field
+3. Verify the output includes indicator-specific data (see schema sections above)
+4. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 
