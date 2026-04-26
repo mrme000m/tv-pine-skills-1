@@ -39,6 +39,14 @@ The runner automatically:
 # Run any public indicator by Pine ID
 node generic-indicator.cjs --pine PUB;ff1a0136336340f38e908eeb12ea33aa --symbol BTCUSDT
 
+# Run a TradingView built-in indicator by name
+node generic-indicator.cjs --builtin RSI --symbol BTCUSDT
+node generic-indicator.cjs --builtin "Bollinger Bands" --symbol ETHUSDT --tf 1h
+
+# List available built-in indicators
+node generic-indicator.cjs --list-builtins
+node generic-indicator.cjs --list-builtins RSI
+
 # Run with custom inputs
 node generic-indicator.cjs --pine PUB;xxxx --symbol ETHUSDT --input lookback=200 --input rows=50
 
@@ -69,6 +77,29 @@ node generic-indicator.cjs --pine PUB;xxxx --symbol BTCUSDT --agent --json
 2. Open browser DevTools → Network tab
 3. Look for WebSocket messages containing `create_study`
 4. The Pine ID is in the `scriptId` field
+
+### Built-in Indicators
+
+The runner includes a catalog of ~700+ TradingView built-in indicators (`builtins.json`). Use `--builtin <name>` to run any of them without knowing the internal ID:
+
+```bash
+# By exact or partial name
+node generic-indicator.cjs --builtin RSI --symbol BTCUSDT
+node generic-indicator.cjs --builtin "Moving Average" --symbol BTCUSDT
+
+# By STD ID directly
+node generic-indicator.cjs --pine STD;RSI --symbol BTCUSDT
+```
+
+Search the catalog with `--list-builtins [term]`:
+
+```bash
+# List all built-ins (first 20)
+node generic-indicator.cjs --list-builtins
+
+# Search for RSI-related built-ins
+node generic-indicator.cjs --list-builtins RSI
+```
 
 ## How the Runner Works
 
@@ -235,10 +266,12 @@ Types are auto-detected from the indicator's metadata.
 
 To confirm this skill executed correctly:
 
-1. Run `node generic-indicator.cjs BTCUSDT --agent`
-2. Confirm the JSON output contains a `status: "ok"` field
-3. Verify the output includes indicator-specific data (see schema sections above)
-4. For multi-timeframe skills, confirm all requested timeframes returned data
+1. Run `node generic-indicator.cjs --builtin RSI --symbol BTCUSDT --json`
+2. Confirm the JSON output contains `intelligence.currentState.latestBar.RSI`
+3. Run `node generic-indicator.cjs --pine PUB;xxxx --symbol BTCUSDT --agent`
+4. Confirm the JSON output contains a `status: "ok"` field
+5. Verify the output includes indicator-specific data (see schema sections above)
+6. For multi-timeframe skills, confirm all requested timeframes returned data
 
 ## Error Handling
 

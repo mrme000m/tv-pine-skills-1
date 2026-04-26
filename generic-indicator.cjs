@@ -22,6 +22,57 @@ const tv = require('./tv-optimized.cjs');
 
 const EXIT_CODES = { SUCCESS: 0, CRITICAL: 1, NO_DATA: 2, TIMEOUT: 3, VALIDATION: 4 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BUILTINS.JSON LOADING
+// ─────────────────────────────────────────────────────────────────────────────
+let _builtinsCache = null;
+
+function loadBuiltins() {
+  if (_builtinsCache) return _builtinsCache;
+  const builtinsPath = path.join(SCRIPT_DIR, 'builtins.json');
+  if (!fs.existsSync(builtinsPath)) {
+    return [];
+  }
+  try {
+    const raw = fs.readFileSync(builtinsPath, 'utf8');
+    _builtinsCache = JSON.parse(raw);
+    return _builtinsCache;
+  } catch (e) {
+    console.warn(`⚠️  Failed to load builtins.json: ${e.message}`);
+    return [];
+  }
+}
+
+function searchBuiltins(term, limit = 20) {
+  const builtins = loadBuiltins();
+  const t = String(term || '').toLowerCase();
+  if (!t) return builtins.slice(0, limit);
+  return builtins.filter(b => {
+    const name = String(b.name || '').toLowerCase();
+    const desc = String(b.description || '').toLowerCase();
+    const shortDesc = String(b.shortDescription || '').toLowerCase();
+    const id = String(b.id || '').toLowerCase();
+    return name.includes(t) || desc.includes(t) || shortDesc.includes(t) || id.includes(t);
+  }).slice(0, limit);
+}
+
+function findBuiltinByName(name) {
+  const builtins = loadBuiltins();
+  const n = String(name || '').toLowerCase();
+  // Exact name match first
+  let match = builtins.find(b => String(b.name || '').toLowerCase() === n);
+  if (match) return match;
+  // Short description match
+  match = builtins.find(b => String(b.shortDescription || '').toLowerCase() === n);
+  if (match) return match;
+  // Partial name match
+  match = builtins.find(b => String(b.name || '').toLowerCase().includes(n));
+  if (match) return match;
+  // STD ID match
+  match = builtins.find(b => String(b.id || '').toLowerCase() === n || String(b.id || '').toLowerCase().endsWith(n));
+  return match || null;
+}
+
 function parseArgs(argv) {
   const args = {
     pineId: null,
@@ -34,6 +85,9 @@ function parseArgs(argv) {
     agent: false,
     verbose: false,
     dryRun: false,
+    listBuiltins: false,
+    listBuiltinsTerm: null,
+    builtin: null,
     inputs: {},
   };
 
@@ -70,6 +124,14 @@ function parseArgs(argv) {
     else if (a === '--agent') { args.json = true; args.agent = true; }
     else if (a === '--verbose' || a === '-v') { args.verbose = true; }
     else if (a === '--dry-run') { args.dryRun = true; }
+    else if (a === '--list-builtins') {
+      args.listBuiltins = true;
+      // If next arg exists and doesn't start with -, treat it as search term
+      if (argv[i + 1] && !argv[i + 1].startsWith('-')) {
+        args.listBuiltinsTerm = argv[++i];
+      }
+    }
+    else if (a === '--builtin' && argv[i + 1]) { args.builtin = argv[++i]; }
     else if (a === '--help' || a === '-h') { args.help = true; }
   }
 
@@ -83,9 +145,12 @@ Generic Pine Script Indicator — Standalone Runner
 
 Usage:
   node generic-indicator.cjs --pine <PINE_ID> --symbol <SYMBOL> [options]
+  node generic-indicator.cjs --builtin <NAME> --symbol <SYMBOL> [options]
 
-Required:
-  --pine <id>               Pine script ID (e.g., PUB;abc123... or USER;xyz...)
+Indicator Sources:
+  --pine <id>               Public Pine script (PUB;xxx, USER;xxx, INV;xxx)
+  --builtin <name>          Built-in TradingView indicator by name or STD ID
+  --list-builtins [term]    List/search available built-in indicators
 
 Options:
   --pine-version <ver>      Version: "last" or specific version (default: last)
@@ -101,9 +166,17 @@ Options:
   --help, -h                Show this help
 
 Examples:
+  # Public Pine script
   node generic-indicator.cjs --pine PUB;ff1a0136336340f38e908eeb12ea33aa --symbol BTCUSDT
-  node generic-indicator.cjs --pine USER;abc123 --symbol ETHUSDT --tf 1h --input lookback=200 --json
-  node generic-indicator.cjs --pine PUB;xxxx --symbol SOLUSDT --agent --out result.json
+
+  # Built-in indicator by name
+  node generic-indicator.cjs --builtin RSI --symbol BTCUSDT --tf 1h
+
+  # Built-in indicator by STD ID
+  node generic-indicator.cjs --pine STD;RSI --symbol BTCUSDT
+
+  # Search built-ins
+  node generic-indicator.cjs --list-builtins Bollinger
 `);
 }
 
@@ -139,6 +212,21 @@ function _inferType(def) {
 function applyInputs(indicator, inputs) {
   if (!inputs || Object.keys(inputs).length === 0) return;
   console.log(`📝 Applying input overrides...`);
+
+  // BuiltInIndicator: options are simple key-value, use force=true
+  if (indicator instanceof tv.BuiltInIndicator) {
+    for (const [key, value] of Object.entries(inputs)) {
+      try {
+        indicator.setOption(key, _coerce(value, 'string'), true);
+        console.log(`   ✅ ${key} → ${JSON.stringify(value)} (forced)`);
+      } catch (e) {
+        console.warn(`   ⚠️  ${key} failed: ${e.message}`);
+      }
+    }
+    return;
+  }
+
+  // PineIndicator: inputs have metadata
   const availableInputs = indicator.inputs || {};
   for (const [key, value] of Object.entries(inputs)) {
     // Try direct tvInputId match first
@@ -783,8 +871,83 @@ function printResults(result) {
   console.log('══════════════════════════════════════════════════════════════════════\n');
 }
 
+// ── indicator resolution ──────────────────────────────────────────
+function isBuiltinType(id) {
+  if (!id) return false;
+  return /^STD;/i.test(id) || /@tv-/.test(id);
+}
+
+async function resolveIndicator(args) {
+  const session = process.env.SESSION || '';
+  const signature = process.env.SIGNATURE || '';
+  if (!session || !signature) throw new Error('SESSION and SIGNATURE env vars required');
+
+  // Determine the target ID
+  let targetId = args.pineId;
+  let targetName = args.pineId;
+
+  // Case 1: --builtin flag provided — lookup in builtins.json
+  if (args.builtin) {
+    const builtin = findBuiltinByName(args.builtin);
+    if (builtin) {
+      targetId = builtin.id;
+      targetName = builtin.name;
+    } else {
+      // Try exact STD ID match
+      const builtins = loadBuiltins();
+      const exact = builtins.find(b => b.id === args.builtin);
+      if (exact) {
+        targetId = exact.id;
+        targetName = exact.name;
+      } else {
+        throw new Error(`Built-in indicator "${args.builtin}" not found. Use --list-builtins to search.`);
+      }
+    }
+  }
+
+  // Case 2: Direct @tv- type string — use BuiltInIndicator
+  if (targetId && /@tv-/.test(targetId)) {
+    console.log(`🔍 Built-in type: ${targetId}`);
+    const indicator = new tv.BuiltInIndicator(targetId);
+    return { indicator, meta: { pineId: targetId, scriptName: targetName, isBuiltin: true } };
+  }
+
+  // Case 3: STD; IDs and public Pine scripts — use pine-facade translate API
+  // The pine-facade handles both public (PUB;/USER;/INV;) and built-in (STD;) IDs
+  console.log(`🔍 Loading indicator: ${targetId} (version: ${args.pineVersion})`);
+  const indicator = await tv.getIndicator(targetId, args.pineVersion, session, signature);
+  const scriptName = indicator?.scriptName || indicator?.metaInfo?.description || targetName || 'Unknown Indicator';
+  console.log(`   Loaded: ${scriptName}`);
+  return { indicator, meta: { pineId: targetId, scriptName, isBuiltin: /^STD;/i.test(targetId) } };
+}
+
+// ── builtins listing ──────────────────────────────────────────────
+function printBuiltins(term) {
+  const results = searchBuiltins(term);
+  console.log(`\n📚 TradingView Built-in Indicators${term ? ` (search: "${term}")` : ''}`);
+  console.log(`   Found: ${results.length} indicators\n`);
+
+  const maxNameLen = Math.max(...results.map(r => (r.name || '').length), 4);
+  const maxShortLen = Math.max(...results.map(r => (r.shortDescription || '').length), 5);
+
+  console.log(`   ${'Name'.padEnd(maxNameLen)} | ${'Short'.padEnd(maxShortLen)} | Type | Inputs | Plots | ID`);
+  console.log(`   ${'-'.repeat(maxNameLen)}-+-${'-'.repeat(maxShortLen)}-+-${'----'.padEnd(4)}-+-${'------'.padEnd(6)}-+-${'-----'.padEnd(5)}-+-${'--'}`);
+
+  results.forEach(b => {
+    const name = (b.name || '').slice(0, maxNameLen).padEnd(maxNameLen);
+    const short = (b.shortDescription || '').slice(0, maxShortLen).padEnd(maxShortLen);
+    const type = (b.type || '').slice(0, 4).padEnd(4);
+    const inputs = String(b.inputsCount || 0).padStart(6);
+    const plots = String(b.plotsCount || 0).padStart(5);
+    console.log(`   ${name} | ${short} | ${type} | ${inputs} | ${plots} | ${b.id}`);
+  });
+
+  console.log(`\n💡 Usage: node generic-indicator.cjs --builtin "${results[0]?.name || 'RSI'}" --symbol BTCUSDT`);
+  console.log(`   Or:    node generic-indicator.cjs --pine "${results[0]?.id || 'STD;RSI'}" --symbol BTCUSDT\n`);
+}
+
 // ── WebSocket runner ──────────────────────────────────────────────
-async function runWebSocket(pineId, pineVersion, symbol, tf, bars, inputs, startTime) {
+async function runWebSocket(indicator, indicatorMeta, symbol, tf, bars, inputs, startTime) {
   const session = process.env.SESSION || '';
   const signature = process.env.SIGNATURE || '';
   if (!session || !signature) throw new Error('SESSION and SIGNATURE env vars required');
@@ -794,11 +957,6 @@ async function runWebSocket(pineId, pineVersion, symbol, tf, bars, inputs, start
   for (let attempt = 1; attempt <= 3; attempt++) {
     let client = null, chart = null, study = null;
     try {
-      console.log(`🔍 Loading indicator: ${pineId} (version: ${pineVersion})`);
-      const indicator = await tv.getIndicator(pineId, pineVersion, session, signature);
-      const scriptName = indicator?.scriptName || indicator?.metaInfo?.description || 'Unknown Indicator';
-      console.log(`   Loaded: ${scriptName}`);
-
       client = new tv.Client({ token: session, signature, location: 'https://www.tradingview.com/' });
       await client.connect();
       const connected = await client.waitForConnected(20000);
@@ -846,7 +1004,7 @@ async function runWebSocket(pineId, pineVersion, symbol, tf, bars, inputs, start
 
       const periods = (study.periods && study.periods.length > 0) ? study.periods : (chart.periods || []);
       const rawData = { periods, graphic: study.graphic || {}, strategyReport: study.strategyReport || null, bars, raw: study };
-      const parsed = parseOutput(rawData, { pineId, scriptName }, tf);
+      const parsed = parseOutput(rawData, indicatorMeta, tf);
       parsed.meta.durationMs = Date.now() - startTime;
 
       try { study.remove(); } catch {}
@@ -876,14 +1034,20 @@ async function runWebSocket(pineId, pineVersion, symbol, tf, bars, inputs, start
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  if (args.help || !args.pineId) {
+  // List built-ins mode
+  if (args.listBuiltins) {
+    printBuiltins(args.listBuiltinsTerm);
+    process.exit(EXIT_CODES.SUCCESS);
+  }
+
+  if (args.help || (!args.pineId && !args.builtin)) {
     printUsage();
     process.exit(args.help ? 0 : 1);
   }
 
   const startTime = Date.now();
   console.log('\n======================================================================');
-  console.log(`📊 Generic Runner: ${args.pineId}`);
+  console.log(`📊 Generic Runner: ${args.builtin || args.pineId}`);
   console.log(`   Symbol: ${args.symbol} | Timeframe: ${args.tf} | Bars: ${args.bars}`);
   console.log('======================================================================');
 
@@ -894,12 +1058,13 @@ async function main() {
 
   if (args.dryRun) {
     console.log('\n🏜️  DRY RUN — Skipping TradingView connection.');
-    console.log(JSON.stringify({ status: 'dry_run', pineId: args.pineId, symbol: args.symbol, timeframe: args.tf, bars: args.bars, inputs: args.inputs, timestamp: new Date().toISOString() }, null, 2));
+    console.log(JSON.stringify({ status: 'dry_run', pineId: args.pineId, builtin: args.builtin, symbol: args.symbol, timeframe: args.tf, bars: args.bars, inputs: args.inputs, timestamp: new Date().toISOString() }, null, 2));
     process.exit(EXIT_CODES.SUCCESS);
   }
 
   try {
-    const result = await runWebSocket(args.pineId, args.pineVersion, args.symbol, args.tf, args.bars, args.inputs, startTime);
+    const { indicator, meta: indMeta } = await resolveIndicator(args);
+    const result = await runWebSocket(indicator, indMeta, args.symbol, args.tf, args.bars, args.inputs, startTime);
     if (args.verbose) console.log(`\n✓ Completed in ${result.meta.durationMs}ms`);
     if (args.json) {
       const output = args.agent ? transformForAgentMode(result, args) : result;
