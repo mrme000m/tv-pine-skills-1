@@ -3,15 +3,27 @@ name: ema-atr-pro-engine
 description: |
   Use the EMA + ATR PRO Ultimate Engine TradingView indicator to track signal activation history, analyze EMA trail trends, and identify high-probability entry/exit setups based on ATR-based trailing stops and EMA crossovers.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, ema, atr-trail]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # EMA + ATR PRO Ultimate Engine — Trading Opportunity Finder
 
-## What This Skill Does
+## When to Use
 
 Helps the user run the standalone `ema-atr-pro-engine.cjs` script against any TradingView symbol and timeframe, then interprets the structured output to surface high-probability trading setups based on EMA trail and ATR signal analysis. The output includes:
 
@@ -24,23 +36,23 @@ The skill connects raw indicator output to actionable trade logic: entry zones (
 
 ## Dependencies
 
-- `ema-atr-pro-engine.cjs` in the project root (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/ema-atr-pro-engine.cjs` in the skill directory (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 
 ## Quick Start
 
 ```bash
 # Default run
-node ema-atr-pro-engine.cjs BTCUSDT
+node scripts/ema-atr-pro-engine.cjs BTCUSDT
 
 # Specific timeframe
-node ema-atr-pro-engine.cjs ETHUSDT --tf 1h --bars 800
+node scripts/ema-atr-pro-engine.cjs ETHUSDT --tf 1h --bars 800
 
 # JSON output
-node ema-atr-pro-engine.cjs BTCUSDT --json --out engine.json
+node scripts/ema-atr-pro-engine.cjs BTCUSDT --json --out engine.json
 
 # Agent mode
-node ema-atr-pro-engine.cjs BTCUSDT --agent
+node scripts/ema-atr-pro-engine.cjs BTCUSDT --agent
 ```
 
 ## How the Indicator Works
@@ -143,12 +155,12 @@ EMA2 vs EMA3 provides additional trend confirmation.
 - **Signal against trail trend** → counter-trend, low probability
 - **EMA2 near EMA3** → no trend, wait for separation
 
-## Workflow
+## Procedure
 
 ### Step 1: Run the Indicator
 
 ```bash
-node ema-atr-pro-engine.cjs <SYMBOL> --tf <tf> --bars <bars>
+node scripts/ema-atr-pro-engine.cjs <SYMBOL> --tf <tf> --bars <bars>
 ```
 
 ### Step 2: Read the Analysis Table
@@ -163,20 +175,24 @@ node ema-atr-pro-engine.cjs <SYMBOL> --tf <tf> --bars <bars>
 > "EMA+ATR Engine shows BULLISH trail trend. Buy signals: 8, Sell signals: 3. Current trail at 67120, EMA2 at 67250, EMA3 at 67080. Active buy signal with no reentry. Price above trail and EMA2 > EMA3. Long bias — entry on current signal, SL at trail (67120), targeting 67800."
 
 
+## Pitfalls
+- No signals in 100+ bars → low volatility or ranging market
+- Reentry mode → previous signal failed, reduce position size or avoid
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node ema-atr-pro-engine.cjs BTCUSDT --agent`
+1. Run `node scripts/ema-atr-pro-engine.cjs BTCUSDT --agent`
 2. Confirm the JSON output contains a `status: "ok"` field
 3. Verify the output includes indicator-specific data (see schema sections above)
 4. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-- "Maximum number of studies" → Built-in retry (3 attempts)
-- "Symbol load timeout" → Check symbol exists on TradingView
-- No data → Check SESSION/SIGNATURE env vars
 
 ## Settings Reference
 
@@ -192,7 +208,7 @@ The script supports overriding Pine script inputs via `--input key=value`:
 
 ```bash
 # Override specific inputs
-node ema-atr-pro-engine.cjs BTCUSDT --input ema2Len=CUSTOM_VALUE
+node scripts/ema-atr-pro-engine.cjs BTCUSDT --input ema2Len=CUSTOM_VALUE
 ```
 
 **Available inputs:** ema2Len (20), ema3Len (50), useEMA2 (true), useEMA3 (false), pivotLen (1), atrLen (7), atrMult (1.4), confirmClose (true), fastMode (false), enableReentry (false), buyColor (color.rgb(5, 7, 12)), sellColor (color.gray), textColor (color.white), bullTrailColor (color.rgb(94, 255, 0)), bearTrailColor (color.red)

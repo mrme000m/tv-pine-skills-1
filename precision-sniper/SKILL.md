@@ -3,15 +3,27 @@ name: precision-sniper
 description: |
   Use the Precision Sniper TradingView indicator to analyze any symbol/timeframe and extract grade-based confluence signals.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, ema, rsi, confluence, graded-signals]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # Precision Sniper — Trading Opportunity Finder
 
-## What This Skill Does
+## When to Use
 
 Helps the user run the standalone `precision-sniper.cjs` script against any TradingView symbol and timeframe, then interprets the structured output to surface grade-based trading setups. The output includes:
 
@@ -25,26 +37,26 @@ The skill connects raw indicator output to actionable trade logic: grade-filtere
 
 ## Dependencies
 
-- `precision-sniper.cjs` in the project root (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/precision-sniper.cjs` in the skill directory (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 
 ## Quick Start
 
 ```bash
 # Auto preset (selects best preset for current timeframe)
-node precision-sniper.cjs BTCUSDT
+node scripts/precision-sniper.cjs BTCUSDT
 
 # Scalping preset (fast EMAs, tight stops)
-node precision-sniper.cjs ETHUSDT --preset scalping --tf 5m --bars 200
+node scripts/precision-sniper.cjs ETHUSDT --preset scalping --tf 5m --bars 200
 
 # Swing preset (slow EMAs, wide stops)
-node precision-sniper.cjs SOLUSDT --preset swing --tf 1h --bars 1000
+node scripts/precision-sniper.cjs SOLUSDT --preset swing --tf 1h --bars 1000
 
 # Conservative preset (higher min score, wider stops)
-node precision-sniper.cjs BTCUSDT --preset conservative --tf 15m --json --out btc.json
+node scripts/precision-sniper.cjs BTCUSDT --preset conservative --tf 15m --json --out btc.json
 
 # Agent mode (optimized for AI/agent workflows)
-node precision-sniper.cjs BTCUSDT --agent --json
+node scripts/precision-sniper.cjs BTCUSDT --agent --json
 ```
 
 ## How the Indicator Works
@@ -162,7 +174,7 @@ When enabled, SL is placed below/above recent swing low/high instead of pure ATR
 - **Counter-HTF** — fighting the macro direction
 - **Low score** (< 5) — weak setup
 
-## Workflow
+## Procedure
 
 ### Step 1: Choose Preset by Horizon
 
@@ -177,7 +189,7 @@ When enabled, SL is placed below/above recent swing low/high instead of pure ATR
 ### Step 2: Run the Indicator
 
 ```bash
-node precision-sniper.cjs <SYMBOL> --preset <preset> --tf <tf> --bars <bars>
+node scripts/precision-sniper.cjs <SYMBOL> --preset <preset> --tf <tf> --bars <bars>
 ```
 
 ### Step 3: Read the Analysis
@@ -200,21 +212,24 @@ From the output, answer:
 > "Precision Sniper shows BULLISH trend with BULLISH HTF bias — fully aligned. Latest signal: Long A+ at 77420. Confluence score 9/10. ADX 28.2 ✓. Entry 77420, SL 77100 (ATR×1.5), TP1 77740, TP2 78060. EMAs: Fast 77380, Slow 77200, Trend 76800 — strong upward stack."
 
 
+## Pitfalls
+- No A+ signals in lookback → market may be choppy or ranging; reduce timeframe or wait
+- Preset mismatch → using swing preset on 5m chart produces lagging signals
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node precision-sniper.cjs BTCUSDT --agent`
+1. Run `node scripts/precision-sniper.cjs BTCUSDT --agent`
 2. Confirm the JSON output contains a `status: "ok"` field
 3. Verify the output includes indicator-specific data (see schema sections above)
 4. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-- "Maximum number of studies" → Built-in retry (3 attempts)
-- "Symbol load timeout" → Check symbol exists on TradingView
-- No grades → Market may be ranging (ADX < 20) or no confluence
-- Empty dashboard → Indicator may not have loaded correctly
 
 ## Settings Reference
 

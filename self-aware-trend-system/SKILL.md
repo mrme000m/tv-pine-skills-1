@@ -3,15 +3,27 @@ name: self-aware-trend-system
 description: |
   Use the Self-Aware Trend System [WillyAlgoTrader] TradingView indicator to analyze any symbol/timeframe and extract adaptive trend-following signals.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, supertrend, tqi, regime]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # Self-Aware Trend System [WillyAlgoTrader] — Trading Opportunity Finder
 
-## What This Skill Does
+## When to Use
 
 Helps the user run the standalone `self-aware-trend-system.cjs` script against any TradingView symbol and timeframe, then interprets the structured output to surface high-probability trend-following setups. The output includes:
 
@@ -25,26 +37,26 @@ The skill connects raw indicator output to actionable trade logic: trend-aligned
 
 ## Dependencies
 
-- `self-aware-trend-system.cjs` in the project root (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/self-aware-trend-system.cjs` in the skill directory (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 
 ## Quick Start
 
 ```bash
 # Default preset (Default: ATR 13, Base Mult 2.0, TQI enabled)
-node self-aware-trend-system.cjs BTCUSDT
+node scripts/self-aware-trend-system.cjs BTCUSDT
 
 # Scalping preset (tighter bands, higher quality influence)
-node self-aware-trend-system.cjs ETHUSDT --preset scalping --tf 5m --bars 200
+node scripts/self-aware-trend-system.cjs ETHUSDT --preset scalping --tf 5m --bars 200
 
 # Swing preset (wider bands, longer lookback)
-node self-aware-trend-system.cjs SOLUSDT --preset swing --tf 1h --bars 1000
+node scripts/self-aware-trend-system.cjs SOLUSDT --preset swing --tf 1h --bars 1000
 
 # Custom + JSON for downstream processing
-node self-aware-trend-system.cjs BTCUSDT --preset crypto --tf 15m --json --out btc.json
+node scripts/self-aware-trend-system.cjs BTCUSDT --preset crypto --tf 15m --json --out btc.json
 
 # Agent mode (optimized for AI/agent workflows)
-node self-aware-trend-system.cjs BTCUSDT --agent --json
+node scripts/self-aware-trend-system.cjs BTCUSDT --agent --json
 ```
 
 ## How the Indicator Works
@@ -165,7 +177,7 @@ The indicator supports Fixed and Dynamic TP modes:
 - **Regime Edge negative** — historical performance poor in current regime
 - **Fresh trend** (< 5 bars) — char-flip min age not met
 
-## Workflow
+## Procedure
 
 ### Step 1: Choose Preset by Horizon
 
@@ -179,7 +191,7 @@ The indicator supports Fixed and Dynamic TP modes:
 ### Step 2: Run the Indicator
 
 ```bash
-node self-aware-trend-system.cjs <SYMBOL> --preset <preset> --tf <tf> --bars <bars>
+node scripts/self-aware-trend-system.cjs <SYMBOL> --preset <preset> --tf <tf> --bars <bars>
 ```
 
 ### Step 3: Read the Analysis
@@ -204,21 +216,24 @@ From the output, answer:
 > "Market is BULLISH with HIGH quality (TQI 0.72). Regime: Trending / Norm Vol. TQI components: Efficiency 0.65, Volatility 0.80, Structure 0.70, Mom Persist 0.75. Latest signal: BUY 24/30. Active trade plan at entry 77400 with SL 76800 (1.0R), TP1 78000, TP2 78600. Win rate in this regime: 42%. Regime edge: +0.15R (n=23)."
 
 
+## Pitfalls
+- No signals in lookback → TQI filter may be too strict; check `--input tqiThreshold`
+- Regime mismatch → "Choppy / High Vol" regimes produce more false signals; reduce size
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node self-aware-trend-system.cjs BTCUSDT --agent`
+1. Run `node scripts/self-aware-trend-system.cjs BTCUSDT --agent`
 2. Confirm the JSON output contains a `status: "ok"` field
 3. Verify the output includes indicator-specific data (see schema sections above)
 4. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-- "Maximum number of studies" → Built-in retry (3 attempts, 3s/6s/9s delay)
-- "Symbol load timeout" → Check symbol exists on TradingView
-- No dashboard → Indicator may need more bars or different timeframe
-- No signals → TQI too low or no setup conditions met
 
 ## Settings Reference
 

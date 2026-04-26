@@ -3,15 +3,27 @@ name: xauusd-mtf-trend
 description: |
   Use the XAUUSD MTF Trend Dashboard TradingView indicator to analyze multi-timeframe trend alignment across multiple timeframes and identify high-probability directional bias for XAUUSD and other symbols.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, multi-timeframe, trend-dashboard]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # XAUUSD MTF Trend Dashboard — Trading Opportunity Finder
 
-## What This Skill Does
+## When to Use
 
 Helps the user run the standalone `xauusd-mtf-trend.cjs` script against any TradingView symbol and timeframe, then interprets the structured output to surface high-probability trading setups based on multi-timeframe trend alignment. The output includes:
 
@@ -24,23 +36,23 @@ The skill connects raw indicator output to actionable trade logic: directional b
 
 ## Dependencies
 
-- `xauusd-mtf-trend.cjs` in the project root (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/xauusd-mtf-trend.cjs` in the skill directory (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 
 ## Quick Start
 
 ```bash
 # Default run (XAUUSD)
-node xauusd-mtf-trend.cjs XAUUSD
+node scripts/xauusd-mtf-trend.cjs XAUUSD
 
 # Other symbols
-node xauusd-mtf-trend.cjs BTCUSDT --tf 1h --bars 1000
+node scripts/xauusd-mtf-trend.cjs BTCUSDT --tf 1h --bars 1000
 
 # JSON output
-node xauusd-mtf-trend.cjs XAUUSD --json --out mtf.json
+node scripts/xauusd-mtf-trend.cjs XAUUSD --json --out mtf.json
 
 # Agent mode
-node xauusd-mtf-trend.cjs XAUUSD --agent
+node scripts/xauusd-mtf-trend.cjs XAUUSD --agent
 ```
 
 ## How the Indicator Works
@@ -135,12 +147,12 @@ Labels provide additional context.
 - **Only 1-2 TFs showing direction** → insufficient confirmation
 - **Mixed labels at entry zone** → indecision
 
-## Workflow
+## Procedure
 
 ### Step 1: Run the Indicator
 
 ```bash
-node xauusd-mtf-trend.cjs <SYMBOL> --tf <tf> --bars <bars>
+node scripts/xauusd-mtf-trend.cjs <SYMBOL> --tf <tf> --bars <bars>
 ```
 
 ### Step 2: Read the Analysis Table
@@ -155,21 +167,24 @@ node xauusd-mtf-trend.cjs <SYMBOL> --tf <tf> --bars <bars>
 > "MTF Dashboard: STRONGLY_BULLISH. 5 of 6 timeframes bullish (1m mixed, rest bull). Labels show bull annotations at 67100 and 67350. Level at 67000 acting as support. Higher TFs (1h, 4h, 1D) all bullish. Lower TFs aligning. Long bias — entry on 1m turning bullish, SL below 67000, targeting 68000."
 
 
+## Pitfalls
+- NEUTRAL bias → mixed timeframe signals; no clear directional edge
+- Dashboard table parse failure → indicator may have updated graphic format; check `graphic.dwgTables`
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node xauusd-mtf-trend.cjs BTCUSDT --agent`
+1. Run `node scripts/xauusd-mtf-trend.cjs BTCUSDT --agent`
 2. Confirm the JSON output contains a `status: "ok"` field
 3. Verify the output includes indicator-specific data (see schema sections above)
 4. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-- "Maximum number of studies" → Built-in retry (3 attempts)
-- "Symbol load timeout" → Check symbol exists on TradingView
-- No MTF data → Indicator may need more bars or different timeframe
-- Graphics format mismatch → Table/label format may differ from expected
 
 ## Settings Reference
 
@@ -185,7 +200,7 @@ The script supports overriding Pine script inputs via `--input key=value`:
 
 ```bash
 # Override specific inputs
-node xauusd-mtf-trend.cjs BTCUSDT --input show_M15=CUSTOM_VALUE
+node scripts/xauusd-mtf-trend.cjs BTCUSDT --input show_M15=CUSTOM_VALUE
 ```
 
 **Available inputs:** show_M15 (true), show_M30 (true), show_H1 (true), show_H4 (true), show_D1 (true), fastLength (10), slowLength (20), rsiLength (14), rsiOverbought (70), rsiOversold (30), macdFastLength (12), macdSlowLength (26), macdSignalLength (9), bbLength (20), bbMultiplier (2), dmiLength (14), dmiSmoothing (14), sarStartValue (0.02), sarIncrement (0.02), sarMaxValue (0.2)

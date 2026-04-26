@@ -3,15 +3,27 @@ name: quantum-ribbon
 description: |
   Use the Quantum Ribbon Lite TradingView indicator to analyze multi-layer EMA alignment, detect ribbon crossovers, and identify trend strength through 5-layer ribbon momentum analysis.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, ema-ribbon, trend-strength]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # Quantum Ribbon Lite — Trading Opportunity Finder
 
-## What This Skill Does
+## When to Use
 
 Helps the user run the standalone `quantum-ribbon.cjs` script against any TradingView symbol and timeframe, then interprets the structured output to surface high-probability trading setups based on multi-layer EMA ribbon analysis. The output includes:
 
@@ -25,23 +37,23 @@ The skill connects raw indicator output to actionable trade logic: entry timing 
 
 ## Dependencies
 
-- `quantum-ribbon.cjs` in the project root (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/quantum-ribbon.cjs` in the skill directory (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 
 ## Quick Start
 
 ```bash
 # Default run
-node quantum-ribbon.cjs BTCUSDT
+node scripts/quantum-ribbon.cjs BTCUSDT
 
 # Specific timeframe
-node quantum-ribbon.cjs ETHUSDT --tf 1h --bars 800
+node scripts/quantum-ribbon.cjs ETHUSDT --tf 1h --bars 800
 
 # JSON output
-node quantum-ribbon.cjs BTCUSDT --json --out ribbon.json
+node scripts/quantum-ribbon.cjs BTCUSDT --json --out ribbon.json
 
 # Agent mode
-node quantum-ribbon.cjs BTCUSDT --agent
+node scripts/quantum-ribbon.cjs BTCUSDT --agent
 ```
 
 ## How the Indicator Works
@@ -154,12 +166,12 @@ The distance between Plot_9 and Plot_10 shows trend strength.
 - **Mixed layers with no cross** → indecision
 - **Narrowing spread** → trend weakening
 
-## Workflow
+## Procedure
 
 ### Step 1: Run the Indicator
 
 ```bash
-node quantum-ribbon.cjs <SYMBOL> --tf <tf> --bars <bars>
+node scripts/quantum-ribbon.cjs <SYMBOL> --tf <tf> --bars <bars>
 ```
 
 ### Step 2: Read the Analysis Table
@@ -174,20 +186,24 @@ node quantum-ribbon.cjs <SYMBOL> --tf <tf> --bars <bars>
 > "Quantum Ribbon: strong_bull (5/5 layers bullish). Spread: 145 USDT (0.21%). Fast slope rising (+0.004). Last bullish cross 2 bars ago. BuySignal active. No StopHit. Strong long bias — entry on pullback to EMA cluster, SL below Plot_10, targeting next resistance."
 
 
+## Pitfalls
+- Neutral ribbon state → no directional edge, wait for layer alignment
+- Layer 5 whipsaw → slowest layer crossover can be late; confirm with faster layers
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node quantum-ribbon.cjs BTCUSDT --agent`
+1. Run `node scripts/quantum-ribbon.cjs BTCUSDT --agent`
 2. Confirm the JSON output contains a `status: "ok"` field
 3. Verify the output includes indicator-specific data (see schema sections above)
 4. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-- "Maximum number of studies" → Built-in retry (3 attempts)
-- "Symbol load timeout" → Check symbol exists on TradingView
-- No data → Check SESSION/SIGNATURE env vars
 
 ## Settings Reference
 
@@ -203,7 +219,7 @@ The script supports overriding Pine script inputs via `--input key=value`:
 
 ```bash
 # Override specific inputs
-node quantum-ribbon.cjs BTCUSDT --input i_sensitivity=CUSTOM_VALUE
+node scripts/quantum-ribbon.cjs BTCUSDT --input i_sensitivity=CUSTOM_VALUE
 ```
 
 **Available inputs:** i_sensitivity (5), i_stop_distance (Normal), i_target_rr (2R), i_show_table (true), i_table_size (Small), i_show_ribbon_state (true), i_show_lines (true), i_entry_line_color (color.white), i_entry_line_opacity (100), i_entry_line_width (2), i_stop_line_color (color.red), i_stop_line_opacity (100), i_stop_line_width (2), i_tp_line_color (color.green), i_tp_line_opacity (100), i_tp_line_width (2), i_table_bg_color (color.white), i_table_bg_opacity (100), i_table_text_color (color.black), i_table_border_color (color.gray), i_table_border_width (1)

@@ -3,15 +3,27 @@ name: golden-rule-strategy
 description: |
   Execute the Golden Rule Strategy — a multi-timeframe high-probability trading system.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, technical-analysis, multi-timeframe, golden-rule]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # Golden Rule Strategy — Multi-Timeframe High-Probability Trading
 
-## What This Skill Does
+## When to Use
 
 Automates the **Golden Rule Strategy**: a disciplined, probability-based trading framework that requires **three timeframes to align** and **four technical signals to confirm** before capital is put at risk. The strategy is designed for serious investors seeking consistent portfolio growth by trading *with* the primary market tide, not against it.
 
@@ -26,7 +38,7 @@ This skill:
 
 ## Dependencies
 
-- `golden-rule-strategy.cjs` in the project root (depends on `tv-optimized.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/golden-rule-strategy.cjs` in the skill directory (depends on `tv-optimized.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 - TradingView WebSocket credentials (`SESSION` and `SIGNATURE` env vars)
 
@@ -34,19 +46,19 @@ This skill:
 
 ```bash
 # Default run (BTCUSDT)
-node golden-rule-strategy.cjs BTCUSDT
+node scripts/golden-rule-strategy.cjs BTCUSDT
 
 # Specific symbol
-node golden-rule-strategy.cjs ETHUSDT
+node scripts/golden-rule-strategy.cjs ETHUSDT
 
 # JSON output for automation
-node golden-rule-strategy.cjs SOLUSDT --json --out golden-rule.json
+node scripts/golden-rule-strategy.cjs SOLUSDT --json --out golden-rule.json
 
 # Agent mode (deterministic delimited JSON)
-node golden-rule-strategy.cjs BTCUSDT --agent
+node scripts/golden-rule-strategy.cjs BTCUSDT --agent
 
 # Silent mode (JSON only, no logs)
-node golden-rule-strategy.cjs BTCUSDT --silent --json
+node scripts/golden-rule-strategy.cjs BTCUSDT --silent --json
 ```
 
 ## The Strategy Framework
@@ -224,12 +236,12 @@ Even when a trade looks perfect, be aware of these traps:
 | 30–59 | Partial alignment | **NO TRADE** — Conditions incomplete |
 | 0–29 | Major misalignment | **NO TRADE** — Stand aside |
 
-## Workflow
+## Procedure
 
 ### Single Asset Analysis
 
 ```bash
-node golden-rule-strategy.cjs BTCUSDT --json --out btc_golden.json
+node scripts/golden-rule-strategy.cjs BTCUSDT --json --out btc_golden.json
 ```
 
 Parse the JSON:
@@ -257,7 +269,7 @@ else:
 
 ```bash
 for sym in BTCUSDT ETHUSDT SOLUSDT; do
-  node golden-rule-strategy.cjs $sym --silent --json --out "grs_${sym}.json" &
+  node scripts/golden-rule-strategy.cjs $sym --silent --json --out "grs_${sym}.json" &
 done
 wait
 ```
@@ -265,24 +277,25 @@ wait
 Rank by `goldenRule.score` — highest score gets priority.
 
 
+## Pitfalls
+- `SESSION and SIGNATURE env vars required` → Missing credentials. Set `.env` with SESSION and SIGNATURE
+- `Insufficient data for indicator computation` → Not enough bars. Increase `--bars` or check symbol liquidity
+- Weekly bearish → Golden Rule prohibits long trades regardless of lower TF signals
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node golden-rule-strategy.cjs BTCUSDT --agent`
+1. Run `node scripts/golden-rule-strategy.cjs BTCUSDT --agent`
 2. Confirm the JSON output contains a `status: "ok"` field
 3. Verify the output includes indicator-specific data (see schema sections above)
 4. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-| Error | Cause | Resolution |
-|-------|-------|------------|
-| `SESSION and SIGNATURE env vars required` | Missing credentials | Set `.env` with SESSION and SIGNATURE |
-| `Connection timeout` | Network or auth issue | Check credentials, retry |
-| `Symbol load timeout` | Invalid symbol | Verify symbol exists on TradingView |
-| `Insufficient data for indicator computation` | Not enough bars | Increase `--bars` or check symbol liquidity |
-| `Maximum number of studies` | Study limit hit | Built-in retry (3 attempts) |
 
 ## Settings Reference
 
@@ -296,7 +309,7 @@ To confirm this skill executed correctly:
 You can override SMC indicator inputs via `--input key=value`:
 
 ```bash
-node golden-rule-strategy.cjs BTCUSDT --input showInternalOrderBlocksInput=false --input showFairValueGapsInput=true
+node scripts/golden-rule-strategy.cjs BTCUSDT --input showInternalOrderBlocksInput=false --input showFairValueGapsInput=true
 ```
 
 See `smart-money-concepts/SKILL.md` for the full input reference.

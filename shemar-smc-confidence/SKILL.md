@@ -3,15 +3,27 @@ name: shemar-smc-confidence
 description: |
   Use the SHEMAR HMA ST + SMC Confidence Filter TradingView indicator to analyze HMA, Supertrend, and Kernel convergence for high-confidence filtered trading signals.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, hma, supertrend, kernel]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # SHEMAR HMA ST + SMC Confidence Filter — Trading Opportunity Finder
 
-## What This Skill Does
+## When to Use
 
 Helps the user run the standalone `shemar-smc-confidence.cjs` script against any TradingView symbol and timeframe, then interprets the structured output to surface high-probability trading setups based on multi-indicator convergence. The output includes:
 
@@ -24,23 +36,23 @@ The skill connects raw indicator output to actionable trade logic: entry only on
 
 ## Dependencies
 
-- `shemar-smc-confidence.cjs` in the project root (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/shemar-smc-confidence.cjs` in the skill directory (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 
 ## Quick Start
 
 ```bash
 # Default run
-node shemar-smc-confidence.cjs BTCUSDT
+node scripts/shemar-smc-confidence.cjs BTCUSDT
 
 # Specific timeframe
-node shemar-smc-confidence.cjs ETHUSDT --tf 1h --bars 800
+node scripts/shemar-smc-confidence.cjs ETHUSDT --tf 1h --bars 800
 
 # JSON output
-node shemar-smc-confidence.cjs BTCUSDT --json --out smc.json
+node scripts/shemar-smc-confidence.cjs BTCUSDT --json --out smc.json
 
 # Agent mode
-node shemar-smc-confidence.cjs BTCUSDT --agent
+node scripts/shemar-smc-confidence.cjs BTCUSDT --agent
 ```
 
 ## How the Indicator Works
@@ -135,12 +147,12 @@ Individual components provide context.
 - **Recent close signal** → previous setup failed
 - **Raw signal only** → insufficient confirmation
 
-## Workflow
+## Procedure
 
 ### Step 1: Run the Indicator
 
 ```bash
-node shemar-smc-confidence.cjs <SYMBOL> --tf <tf> --bars <bars>
+node scripts/shemar-smc-confidence.cjs <SYMBOL> --tf <tf> --bars <bars>
 ```
 
 ### Step 2: Read the Analysis Table
@@ -155,20 +167,24 @@ node shemar-smc-confidence.cjs <SYMBOL> --tf <tf> --bars <bars>
 > "SHEMAR alignment: FULLY_ALIGNED_BULLISH. HMA=bull, ST=bull, Kernel=67120 > HMA=67050. Raw buy: 12, Filtered buy: 8. Current FilteredBuy active. No recent close signals. High-confidence long — entry on current filtered signal, SL below Supertrend at 66900, targeting 67800."
 
 
+## Pitfalls
+- MIXED alignment → indicators disagree; no trade until FULLY_ALIGNED
+- Filtered signal count = 0 → alignment never reached; check timeframe suitability
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node shemar-smc-confidence.cjs BTCUSDT --agent`
+1. Run `node scripts/shemar-smc-confidence.cjs BTCUSDT --agent`
 2. Confirm the JSON output contains a `status: "ok"` field
 3. Verify the output includes indicator-specific data (see schema sections above)
 4. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-- "Maximum number of studies" → Built-in retry (3 attempts)
-- "Symbol load timeout" → Check symbol exists on TradingView
-- No data → Check SESSION/SIGNATURE env vars
 
 ## Settings Reference
 
@@ -184,7 +200,7 @@ The script supports overriding Pine script inputs via `--input key=value`:
 
 ```bash
 # Override specific inputs
-node shemar-smc-confidence.cjs BTCUSDT --input hmaLength=CUSTOM_VALUE
+node scripts/shemar-smc-confidence.cjs BTCUSDT --input hmaLength=CUSTOM_VALUE
 ```
 
 **Available inputs:** hmaLength (50), atrPeriod (10), factor (3), enableShorts (true), useStopEntry (true), stopEntryOffset (1), htfPeriod (50), sqzLength (20), sqzMult (2), sqzKCLength (20), sqzKCMult (1.5), sqzThreshold (0.8), sqzTF (5), kernelPeriod (30), confidenceThresh (30), showScore (true)

@@ -3,15 +3,27 @@ name: smart-money-concepts
 description: |
   Use the Smart Money Concepts [LuxAlgo] TradingView indicator to analyze market structure breaks (BOS/CHoCH), fair value gaps (FVG), order blocks (OB), and equal highs/lows for institutional-grade trade setups.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, smc, order-blocks, fvg]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # Smart Money Concepts [LuxAlgo] — Trading Opportunity Finder
 
-## What This Skill Does
+## When to Use
 
 Helps the user run the standalone `smart-money-concepts.cjs` script against any TradingView symbol and timeframe, then interprets the structured output to surface high-probability trading setups based on institutional market structure analysis. The output includes:
 
@@ -25,27 +37,27 @@ The skill connects raw indicator output to actionable trade logic: entry zones (
 
 ## Dependencies
 
-- `smart-money-concepts.cjs` in the project root (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/smart-money-concepts.cjs` in the skill directory (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 
 ## Quick Start
 
 ```bash
 # Default run
-node smart-money-concepts.cjs BTCUSDT
+node scripts/smart-money-concepts.cjs BTCUSDT
 
 # Specific timeframe
-node smart-money-concepts.cjs ETHUSDT --tf 1h --bars 800
+node scripts/smart-money-concepts.cjs ETHUSDT --tf 1h --bars 800
 
 # JSON output
-node smart-money-concepts.cjs BTCUSDT --json --out smc.json
+node scripts/smart-money-concepts.cjs BTCUSDT --json --out smc.json
 
 # Agent mode
-node smart-money-concepts.cjs BTCUSDT --agent
+node scripts/smart-money-concepts.cjs BTCUSDT --agent
 
 # Multi-timeframe scan (recommended)
-node smart-money-concepts.cjs BTCUSDT --tf 1h --bars 800 --json --out smc_1h.json &
-node smart-money-concepts.cjs BTCUSDT --tf 4h --bars 500 --json --out smc_4h.json
+node scripts/smart-money-concepts.cjs BTCUSDT --tf 1h --bars 800 --json --out smc_1h.json &
+node scripts/smart-money-concepts.cjs BTCUSDT --tf 4h --bars 500 --json --out smc_4h.json
 ```
 
 **Important:** The Pine source default for `showFairValueGapsInput` is `false`, but this runner now applies a safe default override to `true` unless you explicitly pass `--input showFairValueGapsInput=false`.
@@ -215,7 +227,7 @@ Use these as a quick filter before deeper manual analysis.
 - `fvgCount=0` and no EQH/EQL liquidity — clean entry mechanics are absent
 - Large dislocation between price and latest structural event (>5% on crypto) without new structure forming — the indicator may be "stale"
 
-## Workflow
+## Procedure
 
 ### Step 1: Run Multi-Timeframe
 
@@ -223,10 +235,10 @@ Run on at least two timeframes (lower for entry, higher for direction):
 
 ```bash
 # Lower timeframe for precise entry zones
-node smart-money-concepts.cjs BTCUSDT --tf 1h --bars 800 --json --out smc_1h.json
+node scripts/smart-money-concepts.cjs BTCUSDT --tf 1h --bars 800 --json --out smc_1h.json
 
 # Higher timeframe for structural confluence
-node smart-money-concepts.cjs BTCUSDT --tf 4h --bars 500 --json --out smc_4h.json
+node scripts/smart-money-concepts.cjs BTCUSDT --tf 4h --bars 500 --json --out smc_4h.json
 ```
 
 Compare `summary.structureBias` across both. If they disagree, favor the higher timeframe for bias and use the lower timeframe for entry exactness.
@@ -272,20 +284,24 @@ When scanning multiple assets, use this ranking heuristic:
 3. **Lowest / Avoid**: Neutral bias with no FVGs and no EQH/EQL liquidity
 
 
+## Pitfalls
+- No FVG data → `showFairValueGapsInput` may be false; override with `--input showFairValueGapsInput=true`
+- Equal highs/lows without sweep → liquidity pool not yet taken; wait for confirmation
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node smart-money-concepts.cjs BTCUSDT --agent`
+1. Run `node scripts/smart-money-concepts.cjs BTCUSDT --agent`
 2. Confirm the JSON output contains a `status: "ok"` field
 3. Verify the output includes indicator-specific data (see schema sections above)
 4. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-- "Maximum number of studies" → Built-in retry (3 attempts)
-- "Symbol load timeout" → Check symbol exists on TradingView
-- No data → Check SESSION/SIGNATURE env vars
 
 ## Settings Reference
 
@@ -301,7 +317,7 @@ The script supports overriding Pine script inputs via `--input key=value`:
 
 ```bash
 # Override specific inputs
-node smart-money-concepts.cjs BTCUSDT --input showStructureInput=false
+node scripts/smart-money-concepts.cjs BTCUSDT --input showStructureInput=false
 ```
 
 **Available inputs:** modeInput (HISTORICAL), styleInput (COLORED), showTrendInput (false), showInternalsInput (true), showInternalBullInput (ALL), internalBullColorInput (GREEN), showInternalBearInput (ALL), internalBearColorInput (RED), internalFilterConfluenceInput (false), internalStructureSize (TINY), showStructureInput (true), showSwingBullInput (ALL), swingBullColorInput (GREEN), showSwingBearInput (ALL), swingBearColorInput (RED), swingStructureSize (SMALL), showSwingsInput (false), swingsLengthInput (50), showHighLowSwingsInput (true), showInternalOrderBlocksInput (true), internalOrderBlocksSizeInput (5), showSwingOrderBlocksInput (false), swingOrderBlocksSizeInput (5), orderBlockFilterInput (Atr), orderBlockMitigationInput (HIGHLOW), internalBullishOrderBlockColor (color.new(#3179f5, 80)), internalBearishOrderBlockColor (color.new(#f77c80, 80)), swingBullishOrderBlockColor (color.new(#1848cc, 80)), swingBearishOrderBlockColor (color.new(#b22833, 80)), showEqualHighsLowsInput (true), equalHighsLowsLengthInput (3), equalHighsLowsThresholdInput (0.1), equalHighsLowsSizeInput (TINY), showFairValueGapsInput (true via runner default override), fairValueGapsThresholdInput (true), fairValueGapsTimeframeInput (), fairValueGapsBullColorInput (color.new(#00ff68, 70)), fairValueGapsBearColorInput (color.new(#ff0008, 70)), fairValueGapsExtendInput (1), showDailyLevelsInput (false), dailyLevelsStyleInput (SOLID), dailyLevelsColorInput (BLUE), showWeeklyLevelsInput (false), weeklyLevelsStyleInput (SOLID), weeklyLevelsColorInput (BLUE), showMonthlyLevelsInput (false), monthlyLevelsStyleInput (SOLID), monthlyLevelsColorInput (BLUE), showPremiumDiscountZonesInput (false), premiumZoneColorInput (RED), equilibriumZoneColorInput (GRAY), discountZoneColorInput (GREEN)

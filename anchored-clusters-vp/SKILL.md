@@ -3,15 +3,27 @@ name: anchored-clusters-vp
 description: |
   Use the Anchored Clusters Volume Profile TradingView indicator to analyze volume distribution, identify Point of Control (POC) levels, and detect cluster extremes for structural trade setups.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, volume-profile, poc]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # Anchored Clusters Volume Profile — Trading Opportunity Finder
 
-## What This Skill Does
+## When to Use
 
 Helps the user run the standalone `anchored-clusters-vp.cjs` script against any TradingView symbol and timeframe, then interprets the structured output to surface high-probability trading setups based on volume cluster analysis. The output includes:
 
@@ -24,23 +36,23 @@ The skill connects raw indicator output to actionable trade logic: entry zones (
 
 ## Dependencies
 
-- `anchored-clusters-vp.cjs` in the project root (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/anchored-clusters-vp.cjs` in the skill directory (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 
 ## Quick Start
 
 ```bash
 # Default run
-node anchored-clusters-vp.cjs BTCUSDT
+node scripts/anchored-clusters-vp.cjs BTCUSDT
 
 # Specific timeframe and bars
-node anchored-clusters-vp.cjs ETHUSDT --tf 1h --bars 1000
+node scripts/anchored-clusters-vp.cjs ETHUSDT --tf 1h --bars 1000
 
 # JSON output for downstream processing
-node anchored-clusters-vp.cjs BTCUSDT --json --out clusters.json
+node scripts/anchored-clusters-vp.cjs BTCUSDT --json --out clusters.json
 
 # Agent mode (structured JSON for AI consumption)
-node anchored-clusters-vp.cjs BTCUSDT --agent
+node scripts/anchored-clusters-vp.cjs BTCUSDT --agent
 ```
 
 ## How the Indicator Works
@@ -131,12 +143,12 @@ High density = strong acceptance level. Low density = rejection/inefficiency.
 - **No clear POC** → label parsing failed or indicator uses different format
 - **Clusters all on one side** → potential trend exhaustion
 
-## Workflow
+## Procedure
 
 ### Step 1: Run the Indicator
 
 ```bash
-node anchored-clusters-vp.cjs <SYMBOL> --tf <tf> --bars <bars>
+node scripts/anchored-clusters-vp.cjs <SYMBOL> --tf <tf> --bars <bars>
 ```
 
 ### Step 2: Read the Analysis Table
@@ -162,21 +174,24 @@ From the output, answer:
 > "Volume profile shows 12 clusters across a 3200 USDT range. VW-POC at 67245. Price is above POC with latest cluster at 67800-68100. The cluster extreme low at 64500 is key support. Long bias on POC retest from above, SL below 64500, targeting 69000 (next cluster high)."
 
 
+## Pitfalls
+- No clusters detected → Indicator may need more bars or different timeframe
+- No POC data → Labels may use non-standard format; check `graphic.dwgLabels` manually
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node anchored-clusters-vp.cjs BTCUSDT --agent`
+1. Run `node scripts/anchored-clusters-vp.cjs BTCUSDT --agent`
 2. Confirm the JSON output contains a `status: "ok"` field
 3. Verify the output includes indicator-specific data (see schema sections above)
 4. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-- "Maximum number of studies" → Built-in retry (3 attempts). Wait 30s if persistent.
-- "Symbol load timeout" → Check symbol exists on TradingView
-- No clusters detected → Indicator may need more bars or different timeframe
-- No POC data → Labels may use non-standard format; check `graphic.dwgLabels` manually
 
 ## Settings Reference
 
@@ -192,7 +207,7 @@ The script supports overriding Pine script inputs via `--input key=value`:
 
 ```bash
 # Override specific inputs
-node anchored-clusters-vp.cjs BTCUSDT --input startTime=CUSTOM_VALUE
+node scripts/anchored-clusters-vp.cjs BTCUSDT --input startTime=CUSTOM_VALUE
 ```
 
 **Available inputs:** startTime (timestamp("2024-01-01 00:00")), endTime (timestamp("2025-01-01 00:00")), rangeColor (color.new(#607d8b, 90)), kInput (5), iters (50), rowsInput (20), vpWidth (40), vpOffset (10), showDots (true), dotSizeInput (size.small)

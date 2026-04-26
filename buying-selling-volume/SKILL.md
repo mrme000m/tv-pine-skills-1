@@ -3,15 +3,27 @@ name: buying-selling-volume
 description: |
   Use the Buying Selling Volume TradingView indicator to analyze volume pressure, detect buying vs selling dominance, and identify MA cross signals for directional trade setups.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, volume-pressure, ma-cross]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # Buying Selling Volume — Trading Opportunity Finder
 
-## What This Skill Does
+## When to Use
 
 Helps the user run the standalone `buying-selling-volume.cjs` script against any TradingView symbol and timeframe, then interprets the structured output to surface high-probability trading setups based on volume pressure analysis. The output includes:
 
@@ -24,23 +36,23 @@ The skill connects raw indicator output to actionable trade logic: entry timing 
 
 ## Dependencies
 
-- `buying-selling-volume.cjs` in the project root (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/buying-selling-volume.cjs` in the skill directory (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 
 ## Quick Start
 
 ```bash
 # Default run
-node buying-selling-volume.cjs BTCUSDT
+node scripts/buying-selling-volume.cjs BTCUSDT
 
 # Specific timeframe
-node buying-selling-volume.cjs ETHUSDT --tf 5m --bars 300
+node scripts/buying-selling-volume.cjs ETHUSDT --tf 5m --bars 300
 
 # JSON output
-node buying-selling-volume.cjs BTCUSDT --json --out volume.json
+node scripts/buying-selling-volume.cjs BTCUSDT --json --out volume.json
 
 # Agent mode
-node buying-selling-volume.cjs BTCUSDT --agent
+node scripts/buying-selling-volume.cjs BTCUSDT --agent
 ```
 
 ## How the Indicator Works
@@ -126,12 +138,12 @@ The bias summarizes recent pressure over 20 bars.
 - **Pressure divergence** → price and volume disagree
 - **Low absolute volume** → unreliable signals
 
-## Workflow
+## Procedure
 
 ### Step 1: Run the Indicator
 
 ```bash
-node buying-selling-volume.cjs <SYMBOL> --tf <tf> --bars <bars>
+node scripts/buying-selling-volume.cjs <SYMBOL> --tf <tf> --bars <bars>
 ```
 
 ### Step 2: Read the Analysis Table
@@ -146,20 +158,24 @@ node buying-selling-volume.cjs <SYMBOL> --tf <tf> --bars <bars>
 > "Volume pressure is STRONGLY_BULLISH. Buy vol avg 2450 vs sell vol avg 1800. Last BULLISH_CROSS 3 bars ago. Current background is bull (4) with bar state BOTH_ABOVE. Buy pressure dominant in 14/20 recent bars. Long bias — entry on pullback to MA level, SL below recent swing."
 
 
+## Pitfalls
+- No data → Check SESSION/SIGNATURE env vars
+- MA cross false signals in low volume → confirm with volume surge
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node buying-selling-volume.cjs BTCUSDT --agent`
+1. Run `node scripts/buying-selling-volume.cjs BTCUSDT --agent`
 2. Confirm the JSON output contains a `status: "ok"` field
 3. Verify the output includes indicator-specific data (see schema sections above)
 4. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-- "Maximum number of studies" → Built-in retry (3 attempts)
-- "Symbol load timeout" → Check symbol exists on TradingView
-- No data → Check SESSION/SIGNATURE env vars
 
 ## Settings Reference
 
@@ -175,10 +191,10 @@ The script supports overriding Pine script inputs via `--input key=value`:
 
 ```bash
 # Override specific inputs
-node buying-selling-volume.cjs BTCUSDT --input lengthMA1=CUSTOM_VALUE
+node scripts/buying-selling-volume.cjs BTCUSDT --input lengthMA1=CUSTOM_VALUE
 
 # Use a preset
-node buying-selling-volume.cjs BTCUSDT --preset scalping
+node scripts/buying-selling-volume.cjs BTCUSDT --preset scalping
 ```
 
 **Available inputs:** lengthMA1 (10), lengthMA2 (10), maType (SMA)

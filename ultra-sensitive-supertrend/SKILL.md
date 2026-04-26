@@ -3,15 +3,27 @@ name: ultra-sensitive-supertrend
 description: |
   Use the Ultra Sensitive SuperTrend TradingView indicator to analyze dual SuperTrend alignment, detect ultra buy/sell signals, and identify high-confidence trend entries based on double confirmation.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, supertrend, dual]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # Ultra Sensitive SuperTrend — Trading Opportunity Finder
 
-## What This Skill Does
+## When to Use
 
 Helps the user run the standalone `ultra-sensitive-supertrend.cjs` script against any TradingView symbol and timeframe, then interprets the structured output to surface high-probability trading setups based on dual SuperTrend confirmation. The output includes:
 
@@ -25,23 +37,23 @@ The skill connects raw indicator output to actionable trade logic: entry only wh
 
 ## Dependencies
 
-- `ultra-sensitive-supertrend.cjs` in the project root (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/ultra-sensitive-supertrend.cjs` in the skill directory (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 
 ## Quick Start
 
 ```bash
 # Default run
-node ultra-sensitive-supertrend.cjs BTCUSDT
+node scripts/ultra-sensitive-supertrend.cjs BTCUSDT
 
 # Specific timeframe
-node ultra-sensitive-supertrend.cjs ETHUSDT --tf 1h --bars 800
+node scripts/ultra-sensitive-supertrend.cjs ETHUSDT --tf 1h --bars 800
 
 # JSON output
-node ultra-sensitive-supertrend.cjs BTCUSDT --json --out supertrend.json
+node scripts/ultra-sensitive-supertrend.cjs BTCUSDT --json --out supertrend.json
 
 # Agent mode
-node ultra-sensitive-supertrend.cjs BTCUSDT --agent
+node scripts/ultra-sensitive-supertrend.cjs BTCUSDT --agent
 ```
 
 ## How the Indicator Works
@@ -144,12 +156,12 @@ Background provides additional confirmation.
 - **No signals in 50+ bars** → low volatility
 - **Recent ultra signal followed by opposite standard signal** → whipsaw
 
-## Workflow
+## Procedure
 
 ### Step 1: Run the Indicator
 
 ```bash
-node ultra-sensitive-supertrend.cjs <SYMBOL> --tf <tf> --bars <bars>
+node scripts/ultra-sensitive-supertrend.cjs <SYMBOL> --tf <tf> --bars <bars>
 ```
 
 ### Step 2: Read the Analysis Table
@@ -164,20 +176,24 @@ node ultra-sensitive-supertrend.cjs <SYMBOL> --tf <tf> --bars <bars>
 > "Ultra Sensitive ST: BULLISH, aligned. ST1=67150 (bull), ST2=67080 (bull), Background=BULLISH. Signals: Buy=8, UltraBuy=3. Current UltraBuy active. Last UltraBuy 2 bars ago. Strong long — entry on current signal, SL below ST2 at 67000, targeting 67800."
 
 
+## Pitfalls
+- MIXED alignment → STs disagree; no trade until both agree
+- Ultra signal without alignment → early reversal may fail; wait for dual ST confirmation
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node ultra-sensitive-supertrend.cjs BTCUSDT --agent`
+1. Run `node scripts/ultra-sensitive-supertrend.cjs BTCUSDT --agent`
 2. Confirm the JSON output contains a `status: "ok"` field
 3. Verify the output includes indicator-specific data (see schema sections above)
 4. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-- "Maximum number of studies" → Built-in retry (3 attempts)
-- "Symbol load timeout" → Check symbol exists on TradingView
-- No data → Check SESSION/SIGNATURE env vars
 
 ## Settings Reference
 
@@ -193,7 +209,7 @@ The script supports overriding Pine script inputs via `--input key=value`:
 
 ```bash
 # Override specific inputs
-node ultra-sensitive-supertrend.cjs BTCUSDT --input atrPeriod1=CUSTOM_VALUE
+node scripts/ultra-sensitive-supertrend.cjs BTCUSDT --input atrPeriod1=CUSTOM_VALUE
 ```
 
 **Available inputs:** atrPeriod1 (10), multiplier1 (1), atrPeriod2 (5), multiplier2 (0.5), useHeikenAshi (true), showLabels (true), showBG (true)

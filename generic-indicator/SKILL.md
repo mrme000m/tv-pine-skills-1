@@ -3,15 +3,27 @@ name: generic-indicator
 description: |
   Use the Generic Pine Script Indicator runner to analyze ANY TradingView indicator on any symbol/timeframe.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, universal-runner, pine-id]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # Generic Pine Script Indicator — Universal Runner
 
-## What This Skill Does
+## When to Use
 
 Provides a universal interface to run **any** TradingView Pine Script indicator and extract structured data from it. Unlike dedicated skills for specific indicators, this runner works with any public (`PUB;...`) or private (`USER;...`) Pine script that outputs:
 
@@ -29,7 +41,7 @@ The runner automatically:
 
 ## Dependencies
 
-- `generic-indicator.cjs` in the project root (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/generic-indicator.cjs` in the skill directory (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 - The Pine ID of the indicator you want to run
 
@@ -37,24 +49,24 @@ The runner automatically:
 
 ```bash
 # Run any public indicator by Pine ID
-node generic-indicator.cjs --pine PUB;ff1a0136336340f38e908eeb12ea33aa --symbol BTCUSDT
+node scripts/generic-indicator.cjs --pine PUB;ff1a0136336340f38e908eeb12ea33aa --symbol BTCUSDT
 
 # Run a TradingView built-in indicator by name
-node generic-indicator.cjs --builtin RSI --symbol BTCUSDT
-node generic-indicator.cjs --builtin "Bollinger Bands" --symbol ETHUSDT --tf 1h
+node scripts/generic-indicator.cjs --builtin RSI --symbol BTCUSDT
+node scripts/generic-indicator.cjs --builtin "Bollinger Bands" --symbol ETHUSDT --tf 1h
 
 # List available built-in indicators
-node generic-indicator.cjs --list-builtins
-node generic-indicator.cjs --list-builtins RSI
+node scripts/generic-indicator.cjs --list-builtins
+node scripts/generic-indicator.cjs --list-builtins RSI
 
 # Run with custom inputs
-node generic-indicator.cjs --pine PUB;xxxx --symbol ETHUSDT --input lookback=200 --input rows=50
+node scripts/generic-indicator.cjs --pine PUB;xxxx --symbol ETHUSDT --input lookback=200 --input rows=50
 
 # Full JSON output to file
-node generic-indicator.cjs --pine USER;abc123 --symbol SOLUSDT --tf 1h --bars 1000 --json --out result.json
+node scripts/generic-indicator.cjs --pine USER;abc123 --symbol SOLUSDT --tf 1h --bars 1000 --json --out result.json
 
 # Agent mode
-node generic-indicator.cjs --pine PUB;xxxx --symbol BTCUSDT --agent --json
+node scripts/generic-indicator.cjs --pine PUB;xxxx --symbol BTCUSDT --agent --json
 ```
 
 ## How to Find a Pine ID
@@ -84,21 +96,21 @@ The runner includes a catalog of ~700+ TradingView built-in indicators (`builtin
 
 ```bash
 # By exact or partial name
-node generic-indicator.cjs --builtin RSI --symbol BTCUSDT
-node generic-indicator.cjs --builtin "Moving Average" --symbol BTCUSDT
+node scripts/generic-indicator.cjs --builtin RSI --symbol BTCUSDT
+node scripts/generic-indicator.cjs --builtin "Moving Average" --symbol BTCUSDT
 
 # By STD ID directly
-node generic-indicator.cjs --pine STD;RSI --symbol BTCUSDT
+node scripts/generic-indicator.cjs --pine STD;RSI --symbol BTCUSDT
 ```
 
 Search the catalog with `--list-builtins [term]`:
 
 ```bash
 # List all built-ins (first 20)
-node generic-indicator.cjs --list-builtins
+node scripts/generic-indicator.cjs --list-builtins
 
 # Search for RSI-related built-ins
-node generic-indicator.cjs --list-builtins RSI
+node scripts/generic-indicator.cjs --list-builtins RSI
 ```
 
 ## How the Runner Works
@@ -214,7 +226,7 @@ If the indicator draws graphics, inspect them:
 - Lines → structural levels
 - Tables → dashboard statistics
 
-## Workflow
+## Procedure
 
 ### Step 1: Get the Pine ID
 
@@ -223,7 +235,7 @@ Find the indicator's Pine ID from TradingView.
 ### Step 2: Run the Indicator
 
 ```bash
-node generic-indicator.cjs --pine <PINE_ID> --symbol <SYMBOL> --tf <TF> --bars <BARS>
+node scripts/generic-indicator.cjs --pine <PINE_ID> --symbol <SYMBOL> --tf <TF> --bars <BARS>
 ```
 
 ### Step 3: Inspect the Output
@@ -249,7 +261,7 @@ From the output, answer:
 Override indicator inputs using `--input key=value`:
 
 ```bash
-node generic-indicator.cjs --pine PUB;xxxx --symbol BTCUSDT \
+node scripts/generic-indicator.cjs --pine PUB;xxxx --symbol BTCUSDT \
   --input length=20 \
   --input source=close \
   --input showSignals=true
@@ -262,24 +274,27 @@ The runner attempts to match inputs by:
 Types are auto-detected from the indicator's metadata.
 
 
+## Pitfalls
+- "Unknown pine ID" → Check the ID is correct and publicly accessible
+- "Private script access denied" → Private scripts require your auth session to have access
+- "No data returned" → Indicator may be graphics-only; check `graphicData.summary`
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node generic-indicator.cjs --builtin RSI --symbol BTCUSDT --json`
+1. Run `node scripts/generic-indicator.cjs --builtin RSI --symbol BTCUSDT --json`
 2. Confirm the JSON output contains `intelligence.currentState.latestBar.RSI`
-3. Run `node generic-indicator.cjs --pine PUB;xxxx --symbol BTCUSDT --agent`
+3. Run `node scripts/generic-indicator.cjs --pine PUB;xxxx --symbol BTCUSDT --agent`
 4. Confirm the JSON output contains a `status: "ok"` field
 5. Verify the output includes indicator-specific data (see schema sections above)
 6. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-- "Unknown pine ID" → Check the ID is correct and publicly accessible
-- "Private script access denied" → Private scripts require your auth session to have access
-- "Maximum number of studies" → Built-in retry (3 attempts)
-- "No data returned" → Indicator may be graphics-only; check `graphicData.summary`
-- "Symbol load timeout" → Check symbol exists on TradingView
 
 ## Advanced Usage
 
@@ -289,7 +304,7 @@ Run the same indicator across multiple symbols:
 
 ```bash
 for sym in BTCUSDT ETHUSDT SOLUSDT; do
-  node generic-indicator.cjs --pine PUB;xxxx --symbol $sym --json --out ${sym}.json
+  node scripts/generic-indicator.cjs --pine PUB;xxxx --symbol $sym --json --out ${sym}.json
 done
 ```
 
@@ -299,7 +314,7 @@ Run the same indicator on multiple timeframes for confluence:
 
 ```bash
 for tf in 15m 1h 4h; do
-  node generic-indicator.cjs --pine PUB;xxxx --symbol BTCUSDT --tf $tf --json --out btc-${tf}.json
+  node scripts/generic-indicator.cjs --pine PUB;xxxx --symbol BTCUSDT --tf $tf --json --out btc-${tf}.json
 done
 ```
 
@@ -310,7 +325,7 @@ const { execSync } = require('child_process');
 
 function runIndicator(pineId, symbol, tf = '15m', bars = 500) {
   const result = execSync(
-    `node generic-indicator.cjs --pine ${pineId} --symbol ${symbol} --tf ${tf} --bars ${bars} --json`,
+    `node scripts/generic-indicator.cjs --pine ${pineId} --symbol ${symbol} --tf ${tf} --bars ${bars} --json`,
     { encoding: 'utf8', cwd: '/path/to/project' }
   );
   return JSON.parse(result);

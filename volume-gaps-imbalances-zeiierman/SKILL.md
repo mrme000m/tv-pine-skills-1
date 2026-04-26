@@ -3,15 +3,27 @@ name: volume-gaps-imbalances-zeiierman
 description: |
   Use the Volume Gaps & Imbalances (Zeiierman) TradingView indicator to analyze any symbol/timeframe and extract structural trading signals.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, volume-gaps, imbalances]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # Volume Gaps & Imbalances (Zeiierman) — Trading Opportunity Finder
 
-## What This Skill Does
+## When to Use
 
 Helps the user run the standalone `volume-gaps-imbalances-zeiierman.cjs` script against any TradingView symbol and timeframe, then interprets the structured output to surface high-probability trading setups. The output includes:
 
@@ -23,7 +35,7 @@ The skill connects raw indicator output to actionable trade logic: entry zones (
 
 ## Dependencies
 
-- `volume-gaps-imbalances-zeiierman.cjs` in the project root (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/volume-gaps-imbalances-zeiierman.cjs` in the skill directory (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 - Optional: preset configs in `volume-gaps-imbalances-zeiierman/*.json`
 
@@ -31,19 +43,19 @@ The skill connects raw indicator output to actionable trade logic: entry zones (
 
 ```bash
 # Default preset (200 lookback, 50 rows, 20 delta sections)
-node volume-gaps-imbalances-zeiierman.cjs BTCUSDT
+node scripts/volume-gaps-imbalances-zeiierman.cjs BTCUSDT
 
 # Scalping preset (100 lookback, 30 rows, 10 sections)
-node volume-gaps-imbalances-zeiierman.cjs ETHUSDT --preset scalping --tf 5m --bars 200
+node scripts/volume-gaps-imbalances-zeiierman.cjs ETHUSDT --preset scalping --tf 5m --bars 200
 
 # Swing preset (1000 lookback, 150 rows, 25 sections)
-node volume-gaps-imbalances-zeiierman.cjs SOLUSDT --preset swing --tf 1h --bars 1000
+node scripts/volume-gaps-imbalances-zeiierman.cjs SOLUSDT --preset swing --tf 1h --bars 1000
 
 # Custom + JSON for downstream processing
-node volume-gaps-imbalances-zeiierman.cjs BTCUSDT --lookback 500 --rows 100 --json --out btc.json
+node scripts/volume-gaps-imbalances-zeiierman.cjs BTCUSDT --lookback 500 --rows 100 --json --out btc.json
 
 # Agent mode (optimized for AI/agent workflows)
-node volume-gaps-imbalances-zeiierman.cjs BTCUSDT --agent --json
+node scripts/volume-gaps-imbalances-zeiierman.cjs BTCUSDT --agent --json
 ```
 
 ## How the Indicator Works
@@ -146,7 +158,7 @@ The delta panel is the overall direction check. It aggregates buy/sell pressure 
 - **Weak gap re-test**: Price slices through the gap without rejection (not support/resistance, just continuation)
 - **Low-volatility**: Gaps are very small (under 10 USDT on BTC), suggesting choppy environment
 
-## Workflow
+## Procedure
 
 ### Step 1: Choose Preset by Horizon
 
@@ -161,7 +173,7 @@ The delta panel is the overall direction check. It aggregates buy/sell pressure 
 ### Step 2: Run the Indicator
 
 ```bash
-node volume-gaps-imbalances-zeiierman.cjs <SYMBOL> --preset <preset> --tf <tf> --bars <bars>
+node scripts/volume-gaps-imbalances-zeiierman.cjs <SYMBOL> --preset <preset> --tf <tf> --bars <bars>
 ```
 
 ### Step 3: Read the Analysis Table
@@ -253,20 +265,24 @@ If the output doesn't show clear structure:
 Shorter lookback = more responsive to recent price action, better for scalping. Longer lookback = captures large institutional zones, better for swing.
 
 
+## Pitfalls
+- No gaps detected → lookback too short or rows too few; increase `--lookback` or `--rows`
+- Delta near 0% → balanced buy/sell pressure; no directional edge from volume profile
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node volume-gaps-imbalances-zeiierman.cjs BTCUSDT --agent`
+1. Run `node scripts/volume-gaps-imbalances-zeiierman.cjs BTCUSDT --agent`
 2. Confirm the JSON output contains a `status: "ok"` field
 3. Verify the output includes indicator-specific data (see schema sections above)
 4. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-- "Maximum number of studies" → Built-in retry (3 attempts, 3s/6s/9s delay). If still failing, wait 30s and retry.
-- "Symbol load timeout" → Check that symbol exists on TradingView with correct exchange prefix (e.g., `BINANCE:BTCUSDT`)
-- No gaps detected → Increase lookback or check that the symbol actually has volume gaps at that TF
 
 ## Settings Reference
 

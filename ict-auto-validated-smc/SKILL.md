@@ -3,15 +3,27 @@ name: ict-auto-validated-smc
 description: |
   Use the ICT Auto-Validated SMC TradingView indicator to analyze any symbol/timeframe and extract Smart Money Concepts structural trading signals.
 version: 1.0.0
+license: MIT
+author: TradingView Pine Skills
+compatibility: Node.js 18+ with tv-optimized.cjs, tv.cjs, agent-output.cjs and .env (SESSION, SIGNATURE) at project root
 metadata:
   hermes:
     tags: [trading, tradingview, pine-script, ict, smc, bos-choch]
     category: trading
+required_environment_variables:
+  - name: SESSION
+    prompt: TradingView session cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid
+    required_for: full functionality
+  - name: SIGNATURE
+    prompt: TradingView signature cookie
+    help: Extract from browser DevTools → Application → Cookies → tradingview.com → sessionid_sign
+    required_for: full functionality
 ---
 
 # ICT Auto-Validated SMC — Trading Opportunity Finder
 
-## What This Skill Does
+## When to Use
 
 Helps the user run the standalone `ict-auto-validated-smc.cjs` script against any TradingView symbol and timeframe, then interprets the structured output to surface SMC-based trading setups. The output includes:
 
@@ -25,23 +37,23 @@ The skill connects raw SMC output to actionable trade logic: premium/discount en
 
 ## Dependencies
 
-- `ict-auto-validated-smc.cjs` in the project root (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
+- `scripts/ict-auto-validated-smc.cjs` in the skill directory (depends on `tv.cjs` + `.env` with SESSION/SIGNATURE)
 - `node` (v18+)
 
 ## Quick Start
 
 ```bash
 # Default settings (swing length 10, HTF 4H, strict validation)
-node ict-auto-validated-smc.cjs BTCUSDT
+node scripts/ict-auto-validated-smc.cjs BTCUSDT
 
 # Higher timeframe analysis
-node ict-auto-validated-smc.cjs ETHUSDT --tf 1h --bars 1000 --json
+node scripts/ict-auto-validated-smc.cjs ETHUSDT --tf 1h --bars 1000 --json
 
 # Agent mode for AI workflows
-node ict-auto-validated-smc.cjs BTCUSDT --agent --json --out btc-smc.json
+node scripts/ict-auto-validated-smc.cjs BTCUSDT --agent --json --out btc-smc.json
 
 # Lower timeframe for scalping
-node ict-auto-validated-smc.cjs SOLUSDT --tf 5m --bars 500
+node scripts/ict-auto-validated-smc.cjs SOLUSDT --tf 5m --bars 500
 ```
 
 ## How the Indicator Works
@@ -202,12 +214,12 @@ Add confluence by finding:
 - **No sweep/displacement** — unvalidated zones
 - **Low score** (< min score requirement)
 
-## Workflow
+## Procedure
 
 ### Step 1: Run the Indicator
 
 ```bash
-node ict-auto-validated-smc.cjs <SYMBOL> --tf <tf> --bars <bars>
+node scripts/ict-auto-validated-smc.cjs <SYMBOL> --tf <tf> --bars <bars>
 ```
 
 Recommended: 1h for swing, 15m for intraday, 5m for scalping.
@@ -237,21 +249,24 @@ From the output, answer:
 > "Structure is BULLISH with last break BOS ▲. HTF (240) is BULLISH — fully aligned. Price is in DISCOUNT zone. Active: 3 OBs, 2 FVGs, 1 breaker. Best OB: ★★★★☆ bullish at 76800-77000 (discount). Signal: Long 4/10 (29 bars ago). SL below OB low at 76750. Target nearest FVG at 77500."
 
 
+## Pitfalls
+- No structure data → Indicator may need more bars or HTF alignment
+- Grade signals without validation → strict mode may filter valid setups; relax `--input` if needed
+- **Missing SESSION/SIGNATURE**: The most common failure. Ensure `.env` contains valid TradingView session credentials.
+- **"Maximum number of studies"**: TradingView rate-limits concurrent studies. Built-in retry (3 attempts) handles this; wait 30s if persistent.
+- **Symbol not found**: Verify the symbol exists on TradingView (e.g., `BTCUSDT` not `BTC`).
+- **Low bar count**: Some indicators need more bars than default (500). Increase with `--bars <N>`.
+- **Network timeouts**: Check internet connectivity and TradingView status.
+
 ## Verification
 
 To confirm this skill executed correctly:
 
-1. Run `node ict-auto-validated-smc.cjs BTCUSDT --agent`
+1. Run `node scripts/ict-auto-validated-smc.cjs BTCUSDT --agent`
 2. Confirm the JSON output contains a `status: "ok"` field
 3. Verify the output includes indicator-specific data (see schema sections above)
 4. For multi-timeframe skills, confirm all requested timeframes returned data
 
-## Error Handling
-
-- "Maximum number of studies" → Built-in retry (3 attempts)
-- "Symbol load timeout" → Check symbol exists on TradingView
-- No structure → Increase bars or use higher timeframe
-- No OBs → Check that sweep/displacement requirements aren't too strict
 
 ## Settings Reference
 
