@@ -1,0 +1,31 @@
+# fast-agent configuration for Cloudflare Workers AI with multiple models
+# Using generic OpenAI-compatible endpoint
+
+generic:
+  api_key: "REDACTED"
+  base_url: "https://api.cloudflare.com/client/v4/accounts/72d6e3279eb70c619d8a0ea4b908475f/ai/v1"
+
+# Model aliases for token efficiency
+model_aliases:
+  # Fast/cheap for simple tasks - GLM-4.7-Flash: $0.06/M input, $0.40/M output
+  fast: "generic.@cf/zai-org/glm-4.7-flash"
+  # Best for complex reasoning - Kimi K2.6: $0.95/M input, $4.00/M output
+  reasoning: "generic.@cf/moonshotai/kimi-k2.6"
+  # Agentic/multi-task - Nemotron-3-120B: $0.50/M input, $1.50/M output
+  agentic: "generic.@cf/nvidia/nemotron-3-120b-a12b"
+
+# Default model - use Kimi K2.6 for reasoning
+default_model: "generic.@cf/moonshotai/kimi-k2.6"
+
+# Optional: Set temperature
+default_temperature: 0.7
+
+# MCP servers
+mcp:
+  servers:
+    exa:
+      url: "https://mcp.exa.ai/mcp"
+    ctrader:
+      command: "bash"
+      args: ["ctrader/run-stdio.sh"]
+      cwd: "/Volumes/ExMac/code/tradingview/js-experiment03"
