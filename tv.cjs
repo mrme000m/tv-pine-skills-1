@@ -82,18 +82,27 @@ function httpRequest(url, options = {}) {
     const req = lib.request(parsedUrl, reqOptions, (res) => {
       let data = '';
       
+      const chunks = [];
       res.on('data', (chunk) => {
-        data += chunk;
+        chunks.push(chunk);
       });
       
       res.on('end', () => {
+        let data = Buffer.concat(chunks);
+        const encoding = res.headers['content-encoding'];
+        if (encoding === 'gzip') {
+          try { data = zlib.gunzipSync(data); } catch (e) {}
+        }
         resolve({
           status: res.statusCode,
           headers: res.headers,
-          data: data,
+          data: data.toString('utf8'),
           cookies: res.headers['set-cookie'] || []
         });
       });
+      return;
+      
+
     });
     
     req.on('error', reject);
@@ -236,38 +245,86 @@ class Protocol {
 // HTTP / PINE helpers
 // ============================================================================
 
+function _decodeIL(data) {
+  if (typeof data === 'string') {
+    return data;
+  }
+  if (typeof data === 'object' && data !== null) {
+    let source = data.source || data.scriptSource || data.result?.scriptSource || '';
+
+    // Handle base64-encoded source in result.IL (from /translate/ endpoint)
+    if (!source && data.result?.IL) {
+      try {
+        const standardBase64 = data.result.IL.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = standardBase64 + '=='.slice(0, (4 - standardBase64.length % 4) % 4);
+        source = Buffer.from(padded, 'base64').toString('utf8');
+      } catch (e) {
+        console.error('Failed to decode IL field:', e.message);
+      }
+    }
+
+    return source;
+  }
+  return '';
+}
+
 async function getIndicator(id, version = "last", session = "", signature = "") {
   const indicId = id.replace(/[ %]/g, "%25");
-  const url = `https://pine-facade.tradingview.com/pine-facade/translate/${indicId}/${version}`;
-  
+
   const headers = { "Origin": "https://www.tradingview.com" };
   if (session || signature) {
     headers["Cookie"] = genAuthCookies(session, signature);
   }
-  
-  const response = await httpRequest(url, { headers });
+
+  // --- Step 1: Get metadata from /translate/ endpoint ---
+  const translateUrl = `https://pine-facade.tradingview.com/pine-facade/translate/${indicId}/${version}`;
+  const response = await httpRequest(translateUrl, { headers });
   let data;
-  
+
   try {
     data = JSON.parse(response.data);
   } catch (e) {
     throw new Error(`Unexpected response from translate endpoint: ${e.message}\n${response.data.substring(0, 500)}`);
   }
-  
+
   if (typeof data === 'string') {
     throw new Error(`API returned error: ${data}`);
   }
-  
+
   if (!data.success || !data.result?.metaInfo?.inputs) {
     throw new Error(`Inexistent or unsupported indicator: ${data.reason}`);
   }
-  
+
   const meta = data.result.metaInfo;
+
+  // --- Step 2: Get plain source from /get/ endpoint ---
+  let source = '';
+  const getUrl = `https://pine-facade.tradingview.com/pine-facade/get/${indicId}/${version}`;
+  try {
+    const getResponse = await httpRequest(getUrl, { headers });
+    if (getResponse.data) {
+      let getData;
+      try {
+        getData = JSON.parse(getResponse.data);
+      } catch {
+        getData = getResponse.data;
+      }
+      source = _decodeIL(getData);
+    }
+  } catch {
+    // /get/ may fail or be unavailable, fall through to IL decode
+  }
+
+  // --- Step 3: Fall back to decoding IL from /translate/ response ---
+  if (!source) {
+    source = _decodeIL(data);
+  }
+
   const inputs = {};
-  
+
   for (const inp of (meta.inputs || [])) {
     if (['text', 'pineId', 'pineVersion'].includes(inp.id)) continue;
-    
+
     const inlineName = inp.name.replace(/[^a-zA-Z0-9_]/g, '').replace(/ /g, '_');
     inputs[inp.id] = {
       name: inp.name,
@@ -279,12 +336,12 @@ async function getIndicator(id, version = "last", session = "", signature = "") 
       isHidden: Boolean(inp.isHidden),
       isFake: Boolean(inp.isFake)
     };
-    
+
     if (inp.options) {
       inputs[inp.id].options = inp.options;
     }
   }
-  
+
   const plots = {};
   for (const [pid, style] of Object.entries(meta.styles || {})) {
     let title = style.title.replace(/[^a-zA-Z0-9_]/g, '').replace(/ /g, '_');
@@ -298,13 +355,13 @@ async function getIndicator(id, version = "last", session = "", signature = "") 
     }
     plots[pid] = title;
   }
-  
+
   for (const p of (meta.plots || [])) {
     if (!p.target) continue;
     const parent = plots[p.target] || p.target;
     plots[p.id] = `${parent}_${p.type}`;
   }
-  
+
   const options = {
     pineId: meta.scriptIdPart || indicId,
     pineVersion: meta.pine?.version || version,
@@ -312,9 +369,9 @@ async function getIndicator(id, version = "last", session = "", signature = "") 
     shortDescription: meta.shortDescription,
     inputs,
     plots,
-    script: data.result?.ilTemplate || ""
+    script: source || ""
   };
-  
+
   return new PineIndicator(options);
 }
 
@@ -789,9 +846,22 @@ class PineFacadeClient {
     }
     
     if (typeof data === 'object' && data !== null) {
-      const source = data.source || data.scriptSource || data.result?.scriptSource || '';
-      let meta = null;
+      let source = data.source || data.scriptSource || data.result?.scriptSource || '';
       
+      // Handle base64-encoded source in result.IL
+      if (!source && data.result?.IL) {
+        try {
+          // Convert URL-safe base64 to standard base64
+          const standardBase64 = data.result.IL.replace(/-/g, '+').replace(/_/g, '/');
+          // Add padding if needed
+          const padded = standardBase64 + '=='.slice(0, (4 - standardBase64.length % 4) % 4);
+          source = Buffer.from(padded, 'base64').toString('utf8');
+        } catch (e) {
+          console.error('Failed to decode IL field:', e.message);
+        }
+      }
+      
+      let meta = null;
       if (data.metaInfo || data.result?.metaInfo) {
         meta = data.metaInfo || data.result.metaInfo;
       }

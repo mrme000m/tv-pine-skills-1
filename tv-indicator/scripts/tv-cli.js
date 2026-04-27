@@ -348,29 +348,39 @@ class PineClient {
 		};
 	}
 	
-	async get(pineId, version = null) {
-		const headers = this._baseHeaders();
-		let resolvedVersion = version != null ? String(version) : null;
-		if (!resolvedVersion || resolvedVersion === '-1') {
-			const latest = await this._resolveLatestVersion(pineId);
-			if (latest) resolvedVersion = latest;
-		}
-		const targetVersion = resolvedVersion || 'last';
-
-		if (resolvedVersion) {
-			const res = await this._tryGetVersion(pineId, resolvedVersion, headers);
-			if (res) return res;
-		}
-
-		const url = `/translate/${encodeURIComponent(pineId)}/${encodeURIComponent(targetVersion)}`;
-		let res = await this.http.get(url, { headers });
-		if (res.status === 200) {
-			const data = this._parseResponse(res.data);
-			if (data.source) return data;
-		}
-
-		throw new Error(`Failed to fetch ${pineId}@${targetVersion}`);
-	}
+    async get(pineId, version = null) {
+        const headers = this._baseHeaders();
+        let resolvedVersion = version != null ? String(version) : null;
+        
+        // Try /get/ endpoint first (returns actual source code)
+        if (resolvedVersion || resolvedVersion === null) {
+            const targetVersion = resolvedVersion || 'last';
+            const url = `/get/${encodeURIComponent(pineId)}/${encodeURIComponent(targetVersion)}`;
+            try {
+                let res = await this.http.get(url, { headers });
+                if (res.status === 200) {
+                    const data = this._parseResponse(res.data);
+                    if (data.source) return data;
+                }
+            } catch {}
+        }
+        
+        // Fallback to /translate/ if /get/ fails
+        if (!resolvedVersion || resolvedVersion === '-1') {
+            const latest = await this._resolveLatestVersion(pineId);
+            if (latest) resolvedVersion = latest;
+        }
+        
+        const targetVersion = resolvedVersion || 'last';
+        const url = `/translate/${encodeURIComponent(pineId)}/${encodeURIComponent(targetVersion)}`;
+        let res = await this.http.get(url, { headers });
+        if (res.status === 200) {
+            const data = this._parseResponse(res.data);
+            if (data.source) return data;
+        }
+        
+        throw new Error(`Failed to fetch ${pineId}@${targetVersion}`);
+    }
 
 	async _tryGetVersion(pineId, version, headers) {
 		let url = `/get/${encodeURIComponent(pineId)}/${encodeURIComponent(version)}`;
@@ -444,11 +454,26 @@ class PineClient {
 			try { payload = JSON.parse(payload); } catch {}
 		}
 		if (typeof payload === 'object' && payload) {
+			let source = payload.source || payload.scriptSource || payload.result?.scriptSource || null;
+			
+			// Handle base64-encoded source in result.IL
+			if (!source && payload.result?.IL) {
+				try {
+					// Convert URL-safe base64 to standard base64
+					const standardBase64 = payload.result.IL.replace(/-/g, '+').replace(/_/g, '/');
+					// Add padding if needed
+					const padded = standardBase64 + '=='.slice(0, (4 - standardBase64.length % 4) % 4);
+					source = Buffer.from(padded, 'base64').toString('utf8');
+				} catch (e) {
+					console.error('Failed to decode IL field:', e.message);
+				}
+			}
+			
 			return {
-				source: payload.source || null,
+				source,
 				meta: {
-					scriptName: payload.scriptName || payload.scriptTitle || null,
-					version: payload.version || null,
+					scriptName: payload.scriptName || payload.scriptTitle || payload.result?.metaInfo?.name || null,
+					version: payload.version || payload.result?.version || payload.result?.metaInfo?.version || null,
 					created: payload.created || null,
 					updated: payload.updated || null,
 				},

@@ -3,7 +3,7 @@
  * YouTube → TradingView Pine Script — Context Gatherer
  * =====================================================
  * Gathers indicator metadata from a YouTube video and outputs a JSON manifest.
- * The actual code generation is delegated to a Hermes subagent.
+ * The actual code generation is performed by Claude Code (see SKILL.md).
  *
  * Usage:
  *   node youtube-to-tv-pine.cjs "https://youtube.com/watch?v=..."
@@ -74,7 +74,7 @@ YouTube → TradingView Pine Script — Context Gatherer
 =====================================================
 
 Gathers indicator metadata from a YouTube video and outputs a JSON manifest.
-Code generation is delegated to a Hermes subagent (see SKILL.md).
+Code generation is performed by Claude Code (see SKILL.md).
 
 Usage:
   node youtube-to-tv-pine.cjs <YOUTUBE_URL> [options]
@@ -162,8 +162,13 @@ async function phaseExtractIndicator(args) {
   let notebookId = args.nlmNotebookId;
   if (!notebookId) {
     log('Creating NLM notebook...');
-    const nb = execJson('nlm notebook create "YouTube Indicator Extractor" --json');
-    notebookId = nb?.id || nb?.notebook?.id;
+    // Create notebook and extract ID from output
+    const nbRaw = execSync('nlm notebook create "YouTube Indicator Extractor"', {
+      encoding: 'utf8', cwd: PROJECT_ROOT,
+    }).trim();
+    // Extract notebook ID from output
+    const nbIdMatch = nbRaw.match(/ID:\s*([a-f0-9-]+)/i);
+    notebookId = nbIdMatch ? nbIdMatch[1] : nbRaw;
     if (!notebookId) {
       console.error('❌ Failed to create NLM notebook');
       process.exit(1);
@@ -192,12 +197,23 @@ async function phaseExtractIndicator(args) {
 
   try {
     const q1 = execText(
-      `nlm notebook query "${notebookId}" "What is the exact name of the TradingView indicator discussed? Return ONLY the indicator name, nothing else."`,
+      `nlm notebook query "${notebookId}" "What is the exact name of the TradingView Pine Script indicator discussed? Return ONLY the plain indicator name, no extra text, no URLs, no markdown links. If unsure, return 'Unknown'."`,
       { timeout: 30000 }
     );
-    if (typeof q1 === 'string' && q1.length > 0 && q1.length < 200) {
-      indicatorName = q1.replace(/^["']|["']$/g, '').trim();
-      log(`NLM indicator name: ${indicatorName}`);
+    if (typeof q1 === 'string' && q1.length > 0) {
+      // Try to parse as JSON (NLM may return JSON)
+      let parsed = null;
+      try { parsed = JSON.parse(q1); } catch {}
+      if (parsed && parsed.value && parsed.value.answer) {
+        indicatorName = parsed.value.answer.trim();
+      } else {
+        indicatorName = q1.replace(/^["']|["']$/g, '').trim();
+      }
+      if (indicatorName.length > 0 && indicatorName.length < 200) {
+        log(`NLM indicator name: ${indicatorName}`);
+      } else {
+        indicatorName = null;
+      }
     }
   } catch (e) {
     log(`NLM query failed: ${e.message}`);
@@ -210,9 +226,15 @@ async function phaseExtractIndicator(args) {
       { timeout: 30000 }
     );
     if (typeof q2 === 'string') {
-      const idMatch = q2.match(/(PUB;[a-f0-9]+)/i);
+      // Try to parse as JSON (NLM may return JSON)
+      let q2Text = q2;
+      try {
+        const parsedQ2 = JSON.parse(q2);
+        if (parsedQ2?.value?.answer) q2Text = parsedQ2.value.answer;
+      } catch {}
+      const idMatch = q2Text.match(/(PUB;[a-f0-9]+)/i);
       if (idMatch) pineId = idMatch[1];
-      const urlMatch = q2.match(/tradingview\.com\/script\/(\w+)/i);
+      const urlMatch = q2Text.match(/tradingview\.com\/script\/(\w+)/i);
       if (urlMatch && !pineId) pineId = `PUB;${urlMatch[1]}`;
     }
   } catch (e) {

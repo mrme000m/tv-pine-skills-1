@@ -1,10 +1,10 @@
-# Code Generation via Subagent Delegation
+# Code Generation via Claude Code
 
 This skill does **not** use deterministic templates for code generation.
-Instead, it delegates to a Hermes subagent that reasons about the indicator
-and writes appropriate code.
+Instead, it uses **Claude Code** (`claude -p`) — Anthropic's autonomous CLI agent
+in print mode — to reason about the indicator and write appropriate code.
 
-## Why Delegation?
+## Why Claude Code?
 
 Pine script graphic output varies wildly:
 
@@ -17,48 +17,47 @@ Pine script graphic output varies wildly:
 | Strategy | StrategyReport (trades/performance), arrows | High — trade table parsing |
 
 A deterministic template would need to handle all of these, becoming unmaintainable.
-A reasoning subagent with reference examples infers the correct approach per indicator.
+Claude Code, armed with the indicator manifest and reference examples, reasons about
+the correct parser logic and writes production-quality code in a single invocation.
 
-## Delegation Flow
+## Generation Flow
 
 ```
-Parent Agent
+Parent Agent (Hermes)
 │
 ├─ 1. Run context gatherer → manifest.json
 ├─ 2. Read reference skill files (1–2 examples)
-├─ 3. Build delegation context string
 │
-└─► delegate_task(
-      goal="Generate indicator runner and SKILL.md",
-      context="manifest + reference files + requirements",
-      toolsets=["terminal", "file"],
-      max_iterations=50
-    )
+└─► claude -p \
+      "Generate skill from manifest + references..." \
+      --allowedTools "Read,Edit,Write,Bash" \
+      --max-turns 25 \
+      --output-format json
 
-Subagent (isolated, fresh context)
-│
-├─ 1. Read manifest.json
-├─ 2. Read reference skill examples
-├─ 3. Reason about indicator behavior from inputs + description
-├─ 4. Write <slug>/scripts/<slug>.cjs
-├─ 5. Write <slug>/SKILL.md
-├─ 6. Write <slug>/references/indicator-behavior-analysis.md
-├─ 7. Run 'node --check' on runner
-├─ 8. Run dry-run smoke test
-└─ 9. Return: file paths, test results, warnings
+    Claude Code (print mode)
+    │
+    ├─ 1. Read manifest from stdin
+    ├─ 2. Read reference skill examples from disk
+    ├─ 3. Reason about indicator behavior from inputs + description
+    ├─ 4. Write <slug>/scripts/<slug>.cjs
+    ├─ 5. Write <slug>/SKILL.md
+    ├─ 6. Write <slug>/references/indicator-behavior-analysis.md
+    ├─ 7. Run 'node --check' on runner
+    ├─ 8. Run dry-run smoke test
+    └─ 9. Return structured JSON with file paths and results
 
-Parent Agent
+Parent Agent (Hermes)
 │
 ├─ 1. Review generated files
 ├─ 2. Run live test: node <slug>.cjs BTCUSDT --agent
-└─ 3. Present to user (or delegate refinement)
+└─ 3. Present to user (or pipe live output back to Claude for refinement)
 ```
 
-## What the Subagent Generates
+## What Claude Code Generates
 
 ### 1. Runner Script (`scripts/<slug>.cjs`)
 
-The subagent writes a Node.js script with these sections:
+Claude Code writes a Node.js script with these sections:
 
 ```javascript
 // ─── Standard Boilerplate (always present) ───
@@ -72,7 +71,7 @@ The subagent writes a Node.js script with these sections:
 // ─── Custom Parser (indicator-specific) ───
 function parseGraphicOutput(rawData, timeframe) {
   const graphic = rawData?.graphic || {};
-  // Subagent writes heuristic mappings based on manifest.inputs and reference examples
+  // Claude Code writes heuristic mappings based on manifest.inputs and reference examples
   // e.g., for SMC: boxes → FVG/OB, labels → BOS/CHoCH
   // e.g., for Volume Profile: boxes → profile rows, tables → delta panel
 }
@@ -95,9 +94,9 @@ Document for the user on how to refine the parser:
 - Detected graphic elements
 - Refinement guide (run with --verbose, inspect output, update heuristics)
 
-## Reference Examples for the Subagent
+## Reference Examples for Claude Code
 
-The parent agent should include 1–2 reference skill files in the delegation context:
+The prompt should direct Claude Code to read 1–2 reference skill files:
 
 **For structure indicators** (boxes + labels):
 ```
@@ -120,47 +119,50 @@ Patterns: Multiple WebSocket runs (W→D→4H), local oscillator computation
 Key parser logic: Aggregate results across timeframes, compute RSI/Stoch/MACD locally
 ```
 
-## Subagent Prompt Template
+## Claude Code Prompt Template
 
-```
-You are generating a TradingView Pine Script skill. You have:
+```bash
+cat /tmp/indicator-manifest.json | claude -p \
+  "You are generating a TradingView Pine Script skill.
 
-1. A manifest at /tmp/indicator-manifest.json containing:
+   READ the manifest JSON from stdin first. It contains:
    - indicator.name, indicator.slug, indicator.pineId
-   - inputs (with types, defaults, options)
+   - inputs (type, default, options)
    - description
-   - referenceSkills (paths to example skills)
 
-2. Read these reference skill runners for code patterns:
-   - <path1> (simple structure indicator)
-   - <path2> (complex indicator matching the target type)
+   Then READ these reference files for code patterns:
+   - smart-money-concepts/scripts/smart-money-concepts.cjs (boxes + labels)
+   - volume-gaps-imbalances-zeiierman/scripts/volume-gaps-imbalances-zeiierman.cjs (profile + panels)
 
-Generate the following files in <output-dir>/<slug>/:
+   CREATE the following under <slug>/:
 
-A. scripts/<slug>.cjs
-   - Standard boilerplate (root resolver, CLI, WebSocket runner)
-   - INPUT_MAP built from manifest.inputs
-   - parseGraphicOutput with heuristics appropriate for this indicator type
-   - transformForAgentMode with <<<AGENT_JSON_START>>> delimiters
-   - Use exit codes: SUCCESS=0, CRITICAL=1, NO_DATA=2, TIMEOUT=3, VALIDATION=4
+   A. scripts/<slug>.cjs
+      - Standard boilerplate (root resolver, CLI, WebSocket runner)
+      - INPUT_MAP built from manifest.inputs
+      - parseGraphicOutput with heuristics for this indicator type
+      - transformForAgentMode with <<<AGENT_JSON_START>>> delimiters
+      - Exit codes: SUCCESS=0, CRITICAL=1, NO_DATA=2, TIMEOUT=3, VALIDATION=4
 
-B. SKILL.md
-   - Hermes frontmatter with name, description, version, metadata.hermes tags
-   - When to Use, How it Works, Output Schema, Trading Methodology, Pitfalls, Verification
+   B. SKILL.md
+      - Hermes frontmatter with name, description, version, metadata.hermes tags
+      - When to Use, How it Works, Output Schema, Trading Methodology, Pitfalls, Verification
 
-C. references/indicator-behavior-analysis.md
-   - Input reference table
-   - Graphic element guide
-   - Refinement instructions
+   C. references/indicator-behavior-analysis.md
+      - Input reference table
+      - Graphic element guide
+      - Refinement instructions
 
-D. default.json
-   - Default input preset from manifest.inputs values
+   D. default.json
+      - Default input preset from manifest.inputs values
 
-After writing, run:
-  node --check scripts/<slug>.cjs
-  node scripts/<slug>.cjs BTCUSDT --dry-run
+   After writing, RUN:
+     node --check <slug>/scripts/<slug>.cjs
+     node <slug>/scripts/<slug>.cjs BTCUSDT --dry-run
 
-Report any syntax errors or warnings.
+   Report file paths, syntax-check result, and dry-run output." \
+  --allowedTools "Read,Edit,Write,Bash" \
+  --max-turns 25 \
+  --output-format json
 ```
 
 ## Iterative Refinement
@@ -177,7 +179,14 @@ The first generation may misclassify graphic elements. The parent agent should:
    cat /tmp/live-test.json | jq '.summary'
    ```
 
-3. If elements are miscategorized (e.g., boxes counted but none typed as FVG),
-   delegate a refinement pass with the live output as context.
+3. If elements are miscategorized, pipe the live output back to Claude Code:
+   ```bash
+   cat /tmp/live-test.json | claude -p \
+     "Refine parseGraphicOutput in <slug>/scripts/<slug>.cjs.
+      The live output shows these elements are not correctly classified.
+      Update heuristics and re-run dry-run." \
+     --allowedTools "Read,Edit,Bash" \
+     --max-turns 15
+   ```
 
 Typical refinement takes 1–2 iterations for complex indicators.

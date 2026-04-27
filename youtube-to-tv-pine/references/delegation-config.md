@@ -1,103 +1,143 @@
-# Delegation Configuration — OpenRouter Free Tier
+# Claude Code Configuration
 
-This skill uses **Hermes subagent delegation** for code generation.
-The parent agent gathers context; child agents write and verify the runner code.
+This skill delegates code generation to **Claude Code** — Anthropic's autonomous
+CLI agent (`claude`). The parent agent gathers context; Claude Code writes and
+verifies the runner code in print mode (`claude -p`).
 
-## Why Delegate?
+## Why Claude Code?
 
 - **Reasoning-heavy generation**: Writing a correct graphic parser requires
   understanding the indicator's purpose from its inputs and description
-- **Context isolation**: The code-generation subagent starts fresh with reference
-  examples, unburdened by the gathering-phase conversation
-- **Verification loop**: A separate subagent can verify the generated code without
-  the biases of the author subagent
+- **Full file system access**: Claude Code can read reference files, write new
+  code, and run shell commands (`node --check`, dry-run tests) autonomously
+- **Print mode for automation**: `claude -p` skips all interactive dialogs,
+  runs one-shot, and returns structured JSON output
+- **No context window bloat**: Claude Code runs in its own process with its own
+  context — the parent Hermes agent only sees the final result
 
-## OpenRouter Setup
-
-### 1. Get an API Key
-
-1. Visit https://openrouter.ai/keys
-2. Create a free key (no credit card required for free-tier models)
-3. Export it:
+## Install & Authenticate
 
 ```bash
-export OPENROUTER_API_KEY="sk-or-v1-..."
+# Install Claude Code CLI
+npm install -g @anthropic-ai/claude-code
+
+# Authenticate (choose one)
+claude auth login --console     # API key billing
+claude auth login --sso         # Enterprise SSO
+claude auth login               # Browser OAuth (Pro/Max)
+
+# Verify
+claude auth status
+claude doctor
+claude --version
 ```
 
-### 2. Hermes Config
+## Print Mode (`claude -p`) — The Primary Interface
 
-Edit `~/.hermes/config.yaml`:
+For this skill, always use **print mode** (`-p`). It is non-interactive,
+auto-exits when done, and skips all permission dialogs.
 
-```yaml
-model:
-  provider: openrouter
-  model: google/gemini-2.5-pro-exp-03-25:free
-  api_key: ${OPENROUTER_API_KEY}
-
-delegation:
-  max_concurrent_children: 3      # Run 3 subagents in parallel
-  max_spawn_depth: 2              # Parent → Child → Grandchild allowed
-  orchestrator_enabled: true      # Child agents can also delegate
-  default_max_iterations: 50      # Limit per subagent
+```bash
+claude -p "task description" \
+  --allowedTools "Read,Edit,Write,Bash" \
+  --max-turns 25 \
+  --output-format json
 ```
 
-### 3. Model Selection by Task
+| Flag | Purpose | Recommended Value |
+|------|---------|-------------------|
+| `-p, --print` | Non-interactive one-shot mode | Required |
+| `--allowedTools` | Whitelist tools | `Read,Edit,Write,Bash` |
+| `--max-turns` | Limit agentic loops | 25 for generation, 15 for refinement |
+| `--output-format json` | Structured output | Recommended for parsing results |
+| `--max-budget-usd` | Cost cap | 1.00 |
+| `--bare` | Skip plugins/hooks (fastest) | Optional for CI |
 
-| Task | Recommended Model | Why |
-|------|-------------------|-----|
-| Context gathering | (parent model) | Direct tool calls, no delegation needed |
-| Code generation | `tencent/hy3-preview:free` | Long context for reference files + manifest |
-| Code verification | `inclusionai/ling-2.6-1t:free` | Fast syntax check and dry-run |
-| Refinement | `nvidia/nemotron-3-super-120b-a12b:free` | Good at fixing specific parser bugs |
+## Tool Whitelist for This Skill
 
-### 4. Delegation Flow for This Skill
+Restrict Claude Code to only the tools it needs:
 
-```
-Parent Agent
-│
-├─► Run: node scripts/youtube-to-tv-pine.cjs "<url>" > /tmp/manifest.json
-├─► Read: smart-money-concepts/scripts/smart-money-concepts.cjs (example)
-├─► Read: volume-gaps-imbalances-zeiierman/scripts/...cjs (example)
-│
-└─► delegate_task(
-      goal="Generate indicator runner and SKILL.md from manifest",
-      context="""
-        Manifest: /tmp/manifest.json
-        Project root: /Volumes/ExMac/code/tradingview/js-experiment06
-        Reference skill A: smart-money-concepts/scripts/smart-money-concepts.cjs
-        Reference skill B: volume-gaps-imbalances-zeiierman/scripts/...
-        Output dir: <slug>/ (create under project root)
-      """,
-      toolsets=["terminal", "file"],
-      max_iterations=50
-    )
-
-    Subagent (generation)
-    │
-    ├─ 1. Read manifest
-    ├─ 2. Read reference skills
-    ├─ 3. Write runner + SKILL.md + references/
-    ├─ 4. Run node --check
-    ├─ 5. Run dry-run smoke test
-    └─ 6. Return results
-
-Parent Agent
-│
-├─► Run live test: node <slug>/scripts/<slug>.cjs BTCUSDT --agent
-└─► If output looks wrong:
-    delegate_task(
-      goal="Refine graphic parser based on live output",
-      context="Runner path + live JSON output + what's wrong",
-      toolsets=["terminal", "file"],
-      max_iterations=30
-    )
+```bash
+--allowedTools "Read,Edit,Write,Bash"
 ```
 
-## Constraints
+This allows:
+- **Read** — read manifest, reference files, existing code
+- **Edit** — modify generated runner during refinement
+- **Write** — create new runner, SKILL.md, references/
+- **Bash** — run `node --check`, `node *.cjs --dry-run`
 
-- Free-tier models have **rate limits** (~10 RPM). Add delays between delegations.
-- Free-tier models have **lower context windows** (~128K). For large manifests,
-  the parent agent should summarize the manifest rather than passing the raw file.
-- OpenRouter free models are **best-effort**; if unavailable, fall back to the parent model.
-- Subagents cannot call `delegate_task` unless `orchestrator_enabled: true` and
-  `max_spawn_depth >= 2`.
+It blocks:
+- WebSearch/WebFetch (not needed — all context is local)
+- Git operations (parent agent handles git)
+- MCP tools (not needed for this workflow)
+
+## Piped Input Pattern
+
+Pass the manifest as stdin so Claude Code can read it as context:
+
+```bash
+cat /tmp/indicator-manifest.json | claude -p \
+  "Generate a TradingView skill from the manifest in stdin..." \
+  --allowedTools "Read,Edit,Write,Bash" \
+  --max-turns 25
+```
+
+Per the `claude-code` skill: "Pipe input instead of having Claude read files
+when you just need analysis of known content."
+
+## Session Continuation (for Refinement)
+
+If the first generation needs fixes, continue the session:
+
+```bash
+# Save session ID from first run
+cat /tmp/manifest.json | claude -p "..." --output-format json > /tmp/session.json
+SESSION_ID=$(cat /tmp/session.json | jq -r '.session_id')
+
+# Resume for refinement
+cat /tmp/live-output.json | claude -p \
+  "Refine the graphic parser..." \
+  --resume "$SESSION_ID" \
+  --allowedTools "Read,Edit,Bash" \
+  --max-turns 15
+```
+
+## Settings for Faster Startup
+
+Create `~/.claude/settings.json` to set default permissions:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Bash(node --check *)",
+      "Bash(node *.cjs --dry-run)",
+      "Bash(node *.cjs BTCUSDT --agent)"
+    ]
+  }
+}
+```
+
+This skips permission prompts for common verification commands.
+
+## Cost & Performance Tips
+
+1. **Use `--max-turns 25`** — prevents runaway loops. Most generations complete in 10–20 turns.
+2. **Use `--max-budget-usd 1.00`** — caps API spend per invocation.
+3. **Use `--bare`** for fastest startup (skips plugin/hook discovery).
+4. **Pipe the manifest** — faster than asking Claude to read the file via tool call.
+5. **Set `ANTHROPIC_API_KEY`** — avoids OAuth overhead in automated workflows.
+
+## Troubleshooting
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| "Not authenticated" | Session expired | `claude auth login --console` |
+| "Permission denied" | Tool not in `--allowedTools` | Add `Read,Edit,Write,Bash` |
+| Runs too long / too expensive | No `--max-turns` or `--max-budget` | Add `--max-turns 25 --max-budget-usd 1.00` |
+| Trust dialog appears | First run in directory | Use `-p` (print mode skips dialogs) |
+| Output is not JSON | Missing `--output-format json` | Add the flag |

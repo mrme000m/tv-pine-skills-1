@@ -23,3 +23,10 @@ logs/
 # TradingView credentials (never commit)
 authenticated_cookies.json
 successful_credentials.txt
+
+# TradingView local script artifacts
+.tv-scripts/
+.tv-meta.json
+**/.tv-scripts/
+**/.tv-meta.json
+*.bak

@@ -44,9 +44,11 @@ Convert any YouTube indicator review or tutorial into a local, runnable TradingV
 - Trigger phrases: "youtube to pine", "video to tradingview skill", "indicator from youtube",
   "create runner from video", "turn this video into a script"
 
-## Architecture: Orchestrator + Delegated Generation
+## Architecture: Orchestrator + Claude Code Generation
 
-This skill uses a **two-phase delegation pattern**:
+This skill uses a **two-phase pattern** where the context gatherer produces a
+manifest, then **Claude Code** (via the `claude-code` skill) generates the
+indicator runner and SKILL.md:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -54,18 +56,19 @@ This skill uses a **two-phase delegation pattern**:
 │  ─────────────────────────────────────────────────────────────  │
 │  1. Run context gatherer → JSON manifest with indicator metadata│
 │  2. Read reference skill files for code examples                │
-│  3. Prepare delegation payload                                  │
+│  3. Prepare generation prompt + manifest                        │
 └─────────────────────────────────────────────────────────────────┘
                               │
-                              ▼ delegate_task
+                              ▼ claude -p
 ┌─────────────────────────────────────────────────────────────────┐
-│  PHASE 2: Code Generation (Subagent — isolated child)           │
+│  PHASE 2: Code Generation (Claude Code — print mode)            │
 │  ─────────────────────────────────────────────────────────────  │
-│  1. Receives manifest + reference examples                      │
-│  2. Reasons about indicator behavior from metadata              │
-│  3. Writes runner .cjs + SKILL.md + references/                 │
-│  4. Runs node --check + dry-run smoke test                      │
-│  5. Returns file paths and test results                         │
+│  1. Receives manifest (piped stdin) + file references           │
+│  2. Reads reference skill examples from disk                    │
+│  3. Reasons about indicator behavior from metadata              │
+│  4. Writes runner .cjs + SKILL.md + references/                 │
+│  5. Runs node --check + dry-run smoke test                      │
+│  6. Returns structured JSON with file paths and results         │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -78,11 +81,11 @@ This skill uses a **two-phase delegation pattern**:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Why delegate?** Pine script graphic output varies wildly across indicators.
+**Why Claude Code?** Pine script graphic output varies wildly across indicators.
 A deterministic template cannot handle SMC boxes, volume profile rows, EMA ribbons,
-and histogram panels all correctly. A reasoning subagent with reference examples
-can infer the correct parser logic from the indicator's inputs, description, and
-observed TradingView behavior.
+and histogram panels all correctly. Claude Code's reasoning agent, armed with
+reference examples and the indicator manifest, can infer the correct parser logic
+and write production-quality runner code in a single `claude -p` invocation.
 
 ## Procedure
 
@@ -108,7 +111,7 @@ node scripts/youtube-to-tv-pine.cjs "<url>" > /tmp/indicator-manifest.json
 
 ### Step 2: Read Reference Examples
 
-Before delegating, read 1–2 existing skill runners as examples for the subagent:
+Before generating, read 1–2 existing skill runners as examples for Claude Code:
 
 ```bash
 # Read a simple indicator (boxes + labels)
@@ -118,51 +121,57 @@ cat smart-money-concepts/scripts/smart-money-concepts.cjs | head -300
 cat volume-gaps-imbalances-zeiierman/scripts/volume-gaps-imbalances-zeiierman.cjs | head -300
 ```
 
-### Step 3: Delegate Code Generation
+### Step 3: Generate Code via Claude Code
 
-Spawn a subagent with the gathered context and reference examples:
+Use Claude Code in **print mode** (`-p`) for one-shot code generation. Pipe the
+manifest as stdin and restrict tools to `Read,Edit,Write,Bash`:
 
+```bash
+cd /Volumes/ExMac/code/tradingview/js-experiment06
+
+cat /tmp/indicator-manifest.json | claude -p \
+  "You are generating a TradingView Pine Script skill.
+
+   READ the manifest JSON from stdin first. It contains:
+   - indicator.name, indicator.slug, indicator.pineId
+   - inputs (type, default, options)
+   - description
+
+   Then READ these reference files for code patterns:
+   - smart-money-concepts/scripts/smart-money-concepts.cjs (boxes + labels)
+   - volume-gaps-imbalances-zeiierman/scripts/volume-gaps-imbalances-zeiierman.cjs (profile + panels)
+
+   CREATE the following under <slug>/ (where <slug> comes from manifest.indicator.slug):
+
+   1. scripts/<slug>.cjs with:
+      - Standard boilerplate (root resolver, CLI, WebSocket runner)
+      - INPUT_MAP built from manifest.inputs
+      - parseGraphicOutput with heuristics for this indicator type
+      - transformForAgentMode with <<<AGENT_JSON_START>>> delimiters
+      - Exit codes: SUCCESS=0, CRITICAL=1, NO_DATA=2, TIMEOUT=3, VALIDATION=4
+
+   2. SKILL.md with Hermes-compliant frontmatter
+
+   3. references/indicator-behavior-analysis.md
+
+   4. default.json preset from input defaults
+
+   After writing, RUN:
+     node --check <slug>/scripts/<slug>.cjs
+     node <slug>/scripts/<slug>.cjs BTCUSDT --dry-run
+
+   Report file paths, syntax-check result, and dry-run output." \
+  --allowedTools "Read,Edit,Write,Bash" \
+  --max-turns 25 \
+  --output-format json
 ```
-delegate_task(
-  goal="Generate a TradingView indicator runner script and SKILL.md",
-  context="""
-Indicator manifest: /tmp/indicator-manifest.json
-Project root: /Volumes/ExMac/code/tradingview/js-experiment06
-Output directory: <indicator-slug>/ (to be created)
 
-Reference skills to emulate:
-- simple structure (boxes + labels): smart-money-concepts/scripts/smart-money-concepts.cjs
-- volume profile (rows + panels): volume-gaps-imbalances-zeiierman/scripts/volume-gaps-imbalances-zeiierman.cjs
-- multi-timeframe strategy: golden-rule-strategy/scripts/golden-rule-strategy.cjs
-
-Requirements:
-1. Create <indicator-slug>/scripts/<indicator-slug>.cjs with:
-   - CLI parser (--tf, --bars, --input, --json, --agent, --out, --dry-run)
-   - Project root resolver (findProjectRoot)
-   - INPUT_MAP generated from manifest.inputs
-   - WebSocket runner using tv-optimized.cjs
-   - parseGraphicOutput that infers meaning from graphic elements
-   - transformForAgentMode for deterministic JSON output
-   - Exit codes: SUCCESS=0, CRITICAL=1, NO_DATA=2, TIMEOUT=3, VALIDATION=4
-
-2. Create <indicator-slug>/SKILL.md with Hermes-compliant frontmatter
-
-3. Create <indicator-slug>/references/indicator-behavior-analysis.md
-
-4. Run 'node --check' on the generated runner
-
-5. Run a dry-run test: node <slug>.cjs BTCUSDT --dry-run
-
-6. Return: file paths, test results, and any warnings about incomplete parser mappings.
-""",
-  toolsets=["terminal", "file"],
-  max_iterations=50
-)
-```
+**Why print mode?** Per the `claude-code` skill, `-p` skips all interactive dialogs,
+auto-exits when done, and returns structured output — ideal for automation.
 
 ### Step 4: Verify Live
 
-After the subagent returns, run the generated skill:
+After Claude Code returns, run the generated skill:
 
 ```bash
 node <indicator-slug>/scripts/<indicator-slug>.cjs BTCUSDT --agent
@@ -173,28 +182,17 @@ Check that:
 2. Graphic elements are present (`summary.totalBoxes`, `summary.totalLabels`, etc.)
 3. No critical errors
 
-If the output is incomplete (e.g., boxes not categorized correctly), ask the subagent
-for a refinement pass with the actual output sample.
+If the output is incomplete (e.g., boxes not categorized correctly), pipe the
+live output back to Claude Code for a refinement pass:
 
-### Step 5: Iterate (if needed)
-
-If the first generation misses key graphic element mappings:
-
-```
-delegate_task(
-  goal="Refine indicator graphic parser based on live output",
-  context="""
-Generated runner: <indicator-slug>/scripts/<indicator-slug>.cjs
-Live output sample: (paste the JSON output from Step 4)
-
-The graphic output contains these elements that are not yet parsed:
-- (list what the parent agent observed: e.g., "bc:7 boxes are zero-volume gaps")
-
-Update parseGraphicOutput to correctly classify these elements.
-Re-run dry-run and return the updated file.
-""",
-  toolsets=["terminal", "file"]
-)
+```bash
+node <slug>/scripts/<slug>.cjs BTCUSDT --agent --json | \
+  claude -p \
+    "Refine the graphic parser in <slug>/scripts/<slug>.cjs.
+     The live output shows these graphic elements that are not correctly parsed.
+     Update parseGraphicOutput heuristics and re-run dry-run." \
+    --allowedTools "Read,Edit,Bash" \
+    --max-turns 15
 ```
 
 ## Quick Reference
@@ -216,23 +214,37 @@ node scripts/youtube-to-tv-pine.cjs "<url>" > /tmp/manifest.json
 node scripts/youtube-to-tv-pine.cjs "<url>" --dry-run
 ```
 
-## Delegation Configuration
+## Claude Code Prerequisites
 
-For best results, configure OpenRouter free tier as the delegation model:
+This skill delegates code generation to **Claude Code** (Anthropic's CLI agent).
 
-```yaml
-# ~/.hermes/config.yaml
-model:
-  provider: openrouter
-  model: google/gemini-2.5-pro-exp-03-25:free
+### Install & Auth
 
-delegation:
-  max_concurrent_children: 3
-  max_spawn_depth: 2
-  orchestrator_enabled: true
+```bash
+npm install -g @anthropic-ai/claude-code
+claude auth login --console   # or --sso for Enterprise
+claude auth status            # verify
+claude doctor                 # health check
 ```
 
-See `references/delegation-config.md` for full setup.
+### Configuration
+
+Set defaults in `~/.claude/settings.json` for faster startup:
+
+```json
+{
+  "permissions": {
+    "allow": ["Read", "Edit", "Write", "Bash(node --check *)", "Bash(node *.cjs --dry-run)"]
+  }
+}
+```
+
+Or pass flags per invocation (as shown in Step 3):
+- `--allowedTools "Read,Edit,Write,Bash"` — restrict to needed tools
+- `--max-turns 25` — prevent runaway loops
+- `--output-format json` — structured result for parsing
+
+See `references/delegation-config.md` for full Claude Code setup.
 
 ## Pitfalls
 
@@ -242,22 +254,23 @@ See `references/delegation-config.md` for full setup.
 - **Private scripts**: Invite-only indicators won't appear in public search
 - **SESSION required for pull**: `publist.cjs` search works without auth, but pulling metadata requires SESSION
 - **TradingView encodes public Pine source**: The actual Pine code is not retrievable in plain text.
-  The subagent must infer behavior from inputs, description, and observed graphic output.
+  Claude Code must infer behavior from inputs, description, and observed graphic output.
 - **Graphic parser is heuristic on first pass**: Expect 1–2 refinement iterations for complex indicators
-- **Subagent context limits**: For very large manifests, save to file and pass the path in `context`
+- **Claude Code cost**: Each `claude -p` invocation costs ~$0.05–0.50 depending on context size.
+  Use `--max-budget-usd 1.00` for cost caps.
 
 ## Verification
 
 1. Run context gatherer: `node scripts/youtube-to-tv-pine.cjs "<url>" --dry-run`
 2. Confirm manifest JSON is well-formed and contains `pineId`
-3. Delegate generation and confirm subagent reports `node --check` passed
+3. Run Claude Code generation and confirm `node --check` passed
 4. Run generated skill: `node <slug>/scripts/<slug>.cjs BTCUSDT --agent`
 5. Confirm JSON output has `status: "ok"` and graphic element counts
 
 ## References
 
-- **[references/delegation-config.md](references/delegation-config.md)** — OpenRouter + Hermes delegation setup
+- **[references/delegation-config.md](references/delegation-config.md)** — Claude Code install, auth, and print-mode setup
 - **[references/nlm-workflow.md](references/nlm-workflow.md)** — NotebookLM source ingestion & querying
 - **[references/firecrawl-workflow.md](references/firecrawl-workflow.md)** — Video page scraping for TV links
 - **[references/tv-discovery.md](references/tv-discovery.md)** — Public script search & Pine ID resolution
-- **[references/code-generation.md](references/code-generation.md)** — What the subagent generates (runner + SKILL.md)
+- **[references/code-generation.md](references/code-generation.md)** — Claude Code generation flow, prompt template, and refinement
