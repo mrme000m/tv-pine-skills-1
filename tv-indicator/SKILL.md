@@ -119,6 +119,199 @@ node run-indicator.js "USER;abc123" OANDA:XAUUSD 15 ./output
 
 See `references/metadata-fetcher.md` for details.
 
+## CLI Argument Formatting
+
+All scripts use a **custom POSIX-style parser** (not a library like `yargs` or `commander`). Arguments are parsed as:
+
+- **Positional args**: plain values (`node script.js cmd arg1 arg2`)
+- **Long flags**: `--key value` or `--key=value`
+- **Short flags**: `-k value` (single letter only)
+- **Booleans**: `--flag` alone sets it to `true`
+
+### `publist.cjs` — No Auth
+
+```bash
+node publist.cjs <command> [flags]
+
+# Commands
+list                    # List public scripts
+  --offset <n>          # Starting offset (default: 0)
+  --limit <n>           # Max results (default: 20)
+  --json                # Output JSON instead of table
+
+search <query>          # Search public scripts
+  --limit <n>           # Max results (default: 20)
+  --json                # Output JSON
+
+top                     # Fetch top scripts to file
+  --limit <n>           # Number to fetch (default: 100)
+  --output <file>       # Output file (default: top_scripts.json)
+```
+
+### `tv-cli.js` — Script Manager
+
+```bash
+node tv-cli.js <command> [args] [flags]
+
+# Commands
+list                    # List tracked scripts
+  -r, --remote          # List remote saved scripts instead
+
+search <query>          # Search public scripts
+  --limit N             # Limit results (default: 20)
+  --json                # Output as JSON
+
+create <file.pine>      # Create new remote script from local file
+  --name "Name"         # Script name (default: filename)
+
+pull <id|pineId>        # Pull remote script to local
+                        # Omit for interactive remote selection
+
+push <id|file>          # Push local changes to remote
+  --force               # Push even if hashes match
+
+delete <id>             # Delete script from remote and tracking
+  --yes                 # Confirm deletion
+
+compile <file.pine>     # Compile script (check for errors)
+
+inputs <id|file>        # Generate inputs YAML from script
+  --out <path>          # Output path
+
+run <id|pineId|file>    # Run script with TradingView chart session
+  --symbol OANDA:XAUUSD # Market symbol
+  --tf 5m               # Timeframe (auto-converted)
+  --range 500           # Number of bars
+  --inputs <file.yaml>  # Inputs file
+  --<input_id> <value>  # Override specific input (e.g. --in_0 50)
+  --json                # Show JSON output
+  --out <file.json>     # Save output to file
+  --timeout <ms>        # Timeout (default: 60000)
+```
+
+**Target resolution rules for `run`, `pull`, `push`, `inputs`:**
+- **Numeric ID** (`1`, `2`, `3`): Looks up tracked script in `.tv-meta.json`
+- **Pine ID** (`PUB;...`, `USER;...`, `STD;...`): Uses directly
+- **File path**: Resolves relative to cwd, extracts `// pineId: ...` comment if present
+
+### `tvcli.js` — Agent CLI (JSON Output)
+
+```bash
+node tvcli.js <command> [args] [flags]
+
+# Auth & Discovery
+validate                                    # Check auth & connectivity
+search <query>                              # Search public scripts
+  --limit N                                 # Limit results
+
+# Script Lifecycle
+list                                        # List tracked scripts
+  --remote                                  # List remote saved scripts
+
+pull <id|pineId>                            # Pull remote script to local
+  --out <file.pine>                         # Output path
+
+push <id|file>                              # Push local changes to remote
+  --force                                   # Push even if hashes match
+  --create-if-missing                       # Auto-create if no pineId
+
+delete <id>                                 # Delete script
+  --yes, -y                                 # Confirm deletion
+
+compile <file>                              # Compile script
+
+# Execution & Analysis
+run <id|pineId|file> <symbol>               # Run indicator analysis
+  --symbol <sym>                            # Market symbol (also positional)
+  --timeframe <tf>, --tf <tf>               # Timeframe (default: 5m)
+  --range N                                 # Bar count (default: 500)
+  --timeout <ms>                            # Timeout (default: 60000)
+  --<input_id> <value>                      # Input override
+
+scan <id|pineId|file> <symbol>              # Multi-timeframe scan
+  --symbol <sym>                            # Market symbol
+  --timeframes 5m,15m,1h,4h,D               # Comma-separated timeframes
+  --range N                                 # Bar count
+  --timeout <ms>                            # Timeout (default: 90000)
+
+compare <id1> <id2> <symbol>                # Compare two indicators
+  --symbol <sym>
+  --tf <timeframe>                          # Timeframe (default: 5m)
+
+backtest <id|pineId|file> <symbol>          # Run historical analysis
+  --symbol <sym>
+  --tf <timeframe>
+  --range N                                 # More history (default: 2000)
+
+runx <id|pineId|file>                       # Extended multi-variant execution
+  --symbol <sym>                            # Required. Single or comma-separated
+  --timeframes <tfs>                        # Comma-separated
+  --variants <file.json>                    # Input permutation spec
+  --inputs key=val,key2=val2                # Inline input overrides
+  --range N                                 # Bar count (default: 500)
+  --no-score                                # Skip quality scoring
+  --timeout <ms>
+
+batch <file.json>                           # Execute multiple commands
+
+# Global Output Flags
+--format=json|human|yaml|csv                # Output format (default: json)
+--compact                                   # Compact JSON (no whitespace)
+--human                                     # Human-readable output
+--quiet                                     # Suppress non-essential output
+--json                                      # Force JSON output
+```
+
+### `run-indicator.js` — Metadata Fetcher
+
+```bash
+node run-indicator.js [pineId] [symbol] [timeframe] [outputDir]
+
+# All args are positional — no flags
+pineId      # Default: USER;3f4483bd813545908ab6e1a6fe9636d5
+symbol      # Default: OANDA:XAUUSD
+timeframe   # Default: 15 (minutes)
+outputDir   # Optional. If provided, saves result.txt + summary.txt
+
+# Examples
+node run-indicator.js
+node run-indicator.js "PUB;ff1a0136336340f38e908eeb12ea33aa" OANDA:XAUUSD 15
+node run-indicator.js "USER;abc123" OANDA:XAUUSD 60 ./output
+```
+
+### Common Argument Patterns
+
+**Pine ID formats** (all tools accept these):
+| Prefix | Example | Meaning |
+|--------|---------|---------|
+| `USER;` | `USER;4cbc6ac01ab548fca7e566aaf33d33b1` | User-published script |
+| `PUB;` | `PUB;ff1a0136336340f38e908eeb12ea33aa` | Public script |
+| `STD;` | `STD;RSI` | Built-in indicator |
+| `INDIC;` | `INDIC;...` | Third-party indicator |
+
+**Timeframe formats** (auto-converted by all tools):
+| Input | Converted To | Description |
+|-------|-------------|-------------|
+| `5m` | `5` | 5 minutes |
+| `15m` | `15` | 15 minutes |
+| `1h` | `60` | 1 hour |
+| `4h` | `240` | 4 hours |
+| `D` | `D` | Daily |
+| `W` | `W` | Weekly |
+| `M` | `M` | Monthly |
+
+**Input overrides**:
+- `tv-cli.js run`: `--in_0 50 --in_1 14 --show_fib true`
+- `tvcli.js run`: Same style: `--in_0 50 --in_1 14`
+- `tvcli.js runx`: `--inputs length=50,source=close`
+
+**Environment Variables**:
+```bash
+export SESSION="your_sessionid_cookie"
+export SIGNATURE="your_sessionid_sign_cookie"
+export TV_USER="your_tradingview_username"
+```
+
 ## Pitfalls
 
 - **Auth required for most tools**: Only `publist.cjs` works without credentials. `tv-cli.js` and `tvcli.js` enforce SESSION even for public search due to config validation. Always use `publist.cjs` for no-auth discovery.
