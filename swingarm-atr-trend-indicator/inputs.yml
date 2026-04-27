@@ -1,0 +1,32 @@
+# inputs.yml - Generated from TradingView indicator inputs
+
+# Indicator Timeframe (resolution)
+input_4:
+  name: "Indicator Timeframe"
+  type: resolution
+  default: ""
+
+# Trailtype (text)
+input_0:
+  name: "Trailtype"
+  type: text
+  default: "modified"
+  options: ["modified", "unmodified"]
+
+# ATR Period (integer)
+input_1:
+  name: "ATR Period"
+  type: integer
+  default: 28
+
+# ATR Factor (integer)
+input_2:
+  name: "ATR Factor"
+  type: integer
+  default: 5
+
+# Show Fib Entries? (bool)
+input_3:
+  name: "Show Fib Entries?"
+  type: bool
+  default: true
