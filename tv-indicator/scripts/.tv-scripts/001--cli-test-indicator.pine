@@ -1,0 +1,7 @@
+//@version=5
+indicator("Test Compile Indicator", overlay=true)
+src = close
+sma = ta.sma(src, 14)
+ema = ta.ema(src, 14)
+plot(sma, "SMA", color.blue)
+plot(ema, "EMA", color.red)

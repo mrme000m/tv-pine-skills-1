@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "scripts": {
+    "1": {
+      "name": "CLI Test Indicator",
+      "pineId": "USER;4cbc6ac01ab548fca7e566aaf33d33b1",
+      "localPath": ".tv-scripts/001--cli-test-indicator.pine",
+      "localHash": "60bcdba3d204bc06d3fea886fe5aa86e270791ae271bf5b541b694509648a97a",
+      "remoteHash": "60bcdba3d204bc06d3fea886fe5aa86e270791ae271bf5b541b694509648a97a",
+      "remoteVersion": "2.0",
+      "updatedAt": "2026-04-27T00:20:31.673Z"
+    }
+  }
+}
